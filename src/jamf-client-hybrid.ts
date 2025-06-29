@@ -452,18 +452,25 @@ export class JamfApiClientHybrid {
     
     // Try Modern API first
     try {
-      await this.axiosInstance.post(`/api/v1/computers/${deviceId}/inventory-update`);
-    } catch (error) {
-      // Try Classic API
-      await this.axiosInstance.put(`/JSSResource/computers/id/${deviceId}`, {
-        computer: {
-          general: {
-            remote_management: {
-              management_command: 'update_inventory'
-            }
-          }
+      // Modern API uses management commands endpoint
+      await this.axiosInstance.post(`/api/v1/jamf-management-framework/redeploy/${deviceId}`);
+      console.error(`Inventory update requested for device ${deviceId} via Modern API`);
+    } catch (error: any) {
+      if (error.response?.status === 404 || error.response?.status === 403) {
+        console.error('Modern API failed, trying Classic API computercommands...');
+        // Try Classic API using the correct endpoint
+        try {
+          await this.axiosInstance.post(`/JSSResource/computercommands/command/UpdateInventory`, {
+            computer_id: deviceId,
+          });
+          console.error(`Inventory update requested for device ${deviceId} via Classic API`);
+        } catch (classicError) {
+          console.error('Classic API computercommands failed:', classicError);
+          throw classicError;
         }
-      });
+      } else {
+        throw error;
+      }
     }
   }
 
