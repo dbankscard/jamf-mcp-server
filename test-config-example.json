@@ -1,0 +1,7 @@
+{
+  "jamfUrl": "https://your-instance.jamfcloud.com",
+  "clientId": "your-client-id-here",
+  "clientSecret": "your-client-secret-here",
+  "username": "your-username-here",
+  "password": "your-password-here"
+}
