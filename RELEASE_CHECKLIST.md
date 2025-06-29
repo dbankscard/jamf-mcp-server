@@ -38,12 +38,14 @@
 ## Release Steps
 
 1. **Update package.json**
-   - Replace "your-username" with actual GitHub username
+   - Verify GitHub URLs are correct
    - Verify version number (1.0.0)
 
-2. **Run release preparation**
+2. **Verify release readiness**
    ```bash
-   ./prepare-release.sh
+   npm test
+   npm run build
+   npm run lint || true
    ```
 
 3. **Initialize Git repository**
@@ -62,7 +64,7 @@
 
 5. **Push to GitHub**
    ```bash
-   git remote add origin https://github.com/YOUR_USERNAME/jamf-mcp-server.git
+   git remote add origin https://github.com/dbanks-gh/jamf-mcp-server.git
    git branch -M main
    git push -u origin main
    ```
@@ -106,7 +108,7 @@ A Model Context Protocol (MCP) server that enables AI assistants to interact wit
 - Read-only safety mode
 - TypeScript with full type safety
 
-🔗 GitHub: https://github.com/YOUR_USERNAME/jamf-mcp-server
+🔗 GitHub: https://github.com/dbanks-gh/jamf-mcp-server
 
 #MCP #JamfPro #DeviceManagement #OpenSource
 ```

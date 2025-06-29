@@ -20,15 +20,15 @@
     "typecheck": "tsc --noEmit"
   },
   "keywords": ["mcp", "jamf", "mdm", "apple", "device-management"],
-  "author": "Your Name",
+  "author": "dbanks-gh",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-username/jamf-mcp-server.git"
+    "url": "git+https://github.com/dbanks-gh/jamf-mcp-server.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/jamf-mcp-server/issues"
+    "url": "https://github.com/dbanks-gh/jamf-mcp-server/issues"
   },
-  "homepage": "https://github.com/your-username/jamf-mcp-server#readme",
+  "homepage": "https://github.com/dbanks-gh/jamf-mcp-server#readme",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
