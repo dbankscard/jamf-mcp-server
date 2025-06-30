@@ -64,7 +64,7 @@
 
 5. **Push to GitHub**
    ```bash
-   git remote add origin https://github.com/dbanks-gh/jamf-mcp-server.git
+   git remote add origin https://github.com/dbankscard/jamf-mcp-server.git
    git branch -M main
    git push -u origin main
    ```
@@ -108,7 +108,7 @@ A Model Context Protocol (MCP) server that enables AI assistants to interact wit
 - Read-only safety mode
 - TypeScript with full type safety
 
-🔗 GitHub: https://github.com/dbanks-gh/jamf-mcp-server
+🔗 GitHub: https://github.com/dbankscard/jamf-mcp-server
 
 #MCP #JamfPro #DeviceManagement #OpenSource
 ```
