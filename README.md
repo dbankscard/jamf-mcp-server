@@ -11,7 +11,7 @@ An MCP (Model Context Protocol) server that enables AI assistants to interact wi
 
 ```bash
 # Clone the repository
-git clone https://github.com/dbanks-gh/jamf-mcp-server.git
+git clone https://github.com/dbankscard/jamf-mcp-server.git
 cd jamf-mcp-server
 
 # Install dependencies
