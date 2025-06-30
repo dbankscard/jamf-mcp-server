@@ -21,11 +21,9 @@ npm install
 
 # Build the project
 npm run build
-
-# Configure your environment
-cp .env.example .env
-# Edit .env with your Jamf Pro credentials
 ```
+
+Configure your credentials in Claude Desktop (see Configuration section below).
 
 ## Features
 
@@ -74,17 +72,6 @@ cp .env.example .env
    ```
 
 ## Configuration
-
-### Environment Variables
-
-Create a `.env` file or set these environment variables:
-
-```bash
-JAMF_URL=https://your-instance.jamfcloud.com
-JAMF_CLIENT_ID=your-api-client-id
-JAMF_CLIENT_SECRET=your-api-client-secret
-JAMF_READ_ONLY=false  # Set to true for read-only mode
-```
 
 ### Setting up Jamf Pro API Authentication
 
@@ -172,6 +159,19 @@ Search for policies containing "update"
 - **Audit Trail**: All operations are logged
 
 ## Development
+
+### Local Development Setup
+
+For local development without Claude Desktop, create a `.env` file:
+
+```bash
+cp .env.example .env
+# Edit .env with your Jamf Pro credentials:
+# JAMF_URL=https://your-instance.jamfcloud.com
+# JAMF_CLIENT_ID=your-api-client-id
+# JAMF_CLIENT_SECRET=your-api-client-secret
+# JAMF_READ_ONLY=false
+```
 
 ### Running in Development Mode
 ```bash
