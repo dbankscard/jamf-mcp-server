@@ -7,6 +7,8 @@
 
 An MCP (Model Context Protocol) server that enables AI assistants to interact with Jamf Pro for Apple device management tasks.
 
+![Tests](https://github.com/dbankscard/jamf-mcp-server/actions/workflows/test.yml/badge.svg)
+
 ## 🚀 Quick Start
 
 ```bash
