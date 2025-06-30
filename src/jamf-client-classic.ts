@@ -27,11 +27,7 @@ export function parseJamfDate(dateValue: any): Date | null {
   // Handle string dates
   if (typeof dateValue === 'string') {
     try {
-      // Try ISO format first
-      const date = new Date(dateValue);
-      if (!isNaN(date.getTime())) return date;
-      
-      // Try common Jamf date formats
+      // Try common Jamf date formats first
       // Format: "2023-12-25 14:30:00" - assume UTC
       const jamfFormat = /^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/;
       const match = dateValue.match(jamfFormat);
@@ -39,6 +35,10 @@ export function parseJamfDate(dateValue: any): Date | null {
         // Append 'Z' to indicate UTC time
         return new Date(`${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}Z`);
       }
+      
+      // Try ISO format
+      const date = new Date(dateValue);
+      if (!isNaN(date.getTime())) return date;
     } catch (e) {
       // Ignore parsing errors
     }
