@@ -36,6 +36,9 @@ lerna-debug.log*
 # Test scripts (development only)
 test-scripts/
 
+# Local documentation
+MULTIPLE_GIT_ACCOUNTS.md
+
 # Temporary files
 *.tmp
 *.temp
