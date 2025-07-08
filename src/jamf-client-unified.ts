@@ -648,4 +648,287 @@ export class JamfApiClientUnified {
 
     throw new Error('Unable to update inventory - no API access');
   }
+
+  /**
+   * List all configuration profiles (both Computer and Mobile Device)
+   * 
+   * Note: The Classic API returns computer configuration profiles under 
+   * 'os_x_configuration_profiles' (with underscores), not 'osx_configuration_profiles'.
+   * This method handles both field names for compatibility.
+   */
+  async listConfigurationProfiles(type: 'computer' | 'mobiledevice' = 'computer'): Promise<any[]> {
+    await this.checkApiAvailability();
+    
+    // Try Modern API first
+    if (this.modernApiAvailable && this.modernAxios) {
+      try {
+        console.log(`Listing ${type} configuration profiles using Modern API...`);
+        const endpoint = type === 'computer' 
+          ? '/api/v2/computer-configuration-profiles' 
+          : '/api/v2/mobile-device-configuration-profiles';
+        
+        const response = await this.modernAxios.get(endpoint);
+        return response.data.results || [];
+      } catch (error: any) {
+        console.error('Modern API failed for listing profiles:', error.message);
+      }
+    }
+    
+    // Try Classic API
+    if (this.classicApiAvailable && this.classicAxios) {
+      try {
+        console.log(`Listing ${type} configuration profiles using Classic API...`);
+        const endpoint = type === 'computer'
+          ? '/JSSResource/osxconfigurationprofiles'
+          : '/JSSResource/mobiledeviceconfigurationprofiles';
+        
+        const response = await this.classicAxios.get(endpoint);
+        
+        // Debug logging to see response structure
+        console.error(`Classic API response data keys:`, Object.keys(response.data));
+        
+        // Classic API returns os_x_configuration_profiles (with underscores) for computers
+        const profiles = type === 'computer' 
+          ? (response.data.os_x_configuration_profiles || response.data.osx_configuration_profiles || [])
+          : (response.data.configuration_profiles || response.data.mobiledeviceconfigurationprofiles || []);
+        
+        console.error(`Found ${profiles.length} ${type} configuration profiles from Classic API`);
+        return profiles || [];
+      } catch (error) {
+        console.error('Classic API failed for listing profiles:', error);
+      }
+    }
+    
+    throw new Error('Unable to list configuration profiles - no API access');
+  }
+
+  /**
+   * Get configuration profile details
+   */
+  async getConfigurationProfileDetails(profileId: string, type: 'computer' | 'mobiledevice' = 'computer'): Promise<any> {
+    await this.checkApiAvailability();
+    
+    // Try Modern API first
+    if (this.modernApiAvailable && this.modernAxios) {
+      try {
+        console.log(`Getting ${type} configuration profile ${profileId} using Modern API...`);
+        const endpoint = type === 'computer'
+          ? `/api/v2/computer-configuration-profiles/${profileId}`
+          : `/api/v2/mobile-device-configuration-profiles/${profileId}`;
+        
+        const response = await this.modernAxios.get(endpoint);
+        return response.data;
+      } catch (error: any) {
+        console.error('Modern API failed for profile details:', error.message);
+      }
+    }
+    
+    // Try Classic API
+    if (this.classicApiAvailable && this.classicAxios) {
+      try {
+        console.log(`Getting ${type} configuration profile ${profileId} using Classic API...`);
+        const endpoint = type === 'computer'
+          ? `/JSSResource/osxconfigurationprofiles/id/${profileId}`
+          : `/JSSResource/mobiledeviceconfigurationprofiles/id/${profileId}`;
+        
+        const response = await this.classicAxios.get(endpoint);
+        
+        // Debug logging to see response structure
+        console.error(`Classic API response data keys:`, Object.keys(response.data));
+        
+        // Classic API returns os_x_configuration_profile (with underscores) for computers in detail responses
+        const profile = type === 'computer' 
+          ? (response.data.os_x_configuration_profile || response.data.osx_configuration_profile)
+          : (response.data.configuration_profile || response.data.mobiledeviceconfigurationprofile);
+          
+        if (!profile) {
+          throw new Error(`Profile data not found in response for ${type} profile ${profileId}`);
+        }
+          
+        return profile;
+      } catch (error) {
+        console.error('Classic API failed for profile details:', error);
+      }
+    }
+    
+    throw new Error('Unable to get configuration profile details - no API access');
+  }
+
+  /**
+   * Search configuration profiles by name
+   */
+  async searchConfigurationProfiles(query: string, type: 'computer' | 'mobiledevice' = 'computer'): Promise<any[]> {
+    const allProfiles = await this.listConfigurationProfiles(type);
+    
+    // Filter profiles by name (case-insensitive)
+    const searchQuery = query.toLowerCase();
+    return allProfiles.filter(profile => 
+      profile.name?.toLowerCase().includes(searchQuery) ||
+      profile.displayName?.toLowerCase().includes(searchQuery)
+    );
+  }
+
+  /**
+   * Deploy configuration profile to devices
+   */
+  async deployConfigurationProfile(profileId: string, deviceIds: string[], type: 'computer' | 'mobiledevice' = 'computer'): Promise<void> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot deploy configuration profiles in read-only mode');
+    }
+    
+    await this.checkApiAvailability();
+    
+    // Get current profile details to update scope
+    const profile = await this.getConfigurationProfileDetails(profileId, type);
+    
+    // Try Modern API first
+    if (this.modernApiAvailable && this.modernAxios) {
+      try {
+        console.log(`Deploying ${type} configuration profile ${profileId} using Modern API...`);
+        
+        const endpoint = type === 'computer'
+          ? `/api/v2/computer-configuration-profiles/${profileId}`
+          : `/api/v2/mobile-device-configuration-profiles/${profileId}`;
+        
+        // Add devices to the profile scope
+        const currentScope = profile.scope || {};
+        const currentDevices = type === 'computer' 
+          ? (currentScope.computerIds || [])
+          : (currentScope.mobileDeviceIds || []);
+        
+        const updatedDeviceIds = [...new Set([...currentDevices, ...deviceIds])];
+        
+        const updatePayload = {
+          ...profile,
+          scope: {
+            ...currentScope,
+            [type === 'computer' ? 'computerIds' : 'mobileDeviceIds']: updatedDeviceIds
+          }
+        };
+        
+        await this.modernAxios.put(endpoint, updatePayload);
+        console.log(`Successfully deployed profile ${profileId} to ${deviceIds.length} ${type}(s)`);
+        return;
+      } catch (error: any) {
+        console.error('Modern API failed for deploying profile:', error.message);
+      }
+    }
+    
+    // Try Classic API
+    if (this.classicApiAvailable && this.classicAxios) {
+      try {
+        console.log(`Deploying ${type} configuration profile ${profileId} using Classic API...`);
+        
+        const endpoint = type === 'computer'
+          ? `/JSSResource/osxconfigurationprofiles/id/${profileId}`
+          : `/JSSResource/mobiledeviceconfigurationprofiles/id/${profileId}`;
+        
+        // For Classic API, we need to update the scope XML
+        const scopeKey = type === 'computer' ? 'computers' : 'mobile_devices';
+        const currentDevices = profile.scope?.[scopeKey] || [];
+        
+        const newDevices = deviceIds.map(id => ({ id: parseInt(id) }));
+        const updatedDevices = [...currentDevices, ...newDevices];
+        
+        const updatePayload = {
+          [type === 'computer' ? 'os_x_configuration_profile' : 'configuration_profile']: {
+            scope: {
+              [scopeKey]: updatedDevices
+            }
+          }
+        };
+        
+        await this.classicAxios.put(endpoint, updatePayload);
+        console.log(`Successfully deployed profile ${profileId} to ${deviceIds.length} ${type}(s) via Classic API`);
+        return;
+      } catch (error) {
+        console.error('Classic API failed for deploying profile:', error);
+      }
+    }
+    
+    throw new Error('Unable to deploy configuration profile - no API access');
+  }
+
+  /**
+   * Remove configuration profile from devices
+   */
+  async removeConfigurationProfile(profileId: string, deviceIds: string[], type: 'computer' | 'mobiledevice' = 'computer'): Promise<void> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot remove configuration profiles in read-only mode');
+    }
+    
+    await this.checkApiAvailability();
+    
+    // Get current profile details to update scope
+    const profile = await this.getConfigurationProfileDetails(profileId, type);
+    
+    // Try Modern API first
+    if (this.modernApiAvailable && this.modernAxios) {
+      try {
+        console.log(`Removing ${type} configuration profile ${profileId} using Modern API...`);
+        
+        const endpoint = type === 'computer'
+          ? `/api/v2/computer-configuration-profiles/${profileId}`
+          : `/api/v2/mobile-device-configuration-profiles/${profileId}`;
+        
+        // Remove devices from the profile scope
+        const currentScope = profile.scope || {};
+        const currentDevices = type === 'computer' 
+          ? (currentScope.computerIds || [])
+          : (currentScope.mobileDeviceIds || []);
+        
+        const updatedDeviceIds = currentDevices.filter((id: string) => !deviceIds.includes(String(id)));
+        
+        const updatePayload = {
+          ...profile,
+          scope: {
+            ...currentScope,
+            [type === 'computer' ? 'computerIds' : 'mobileDeviceIds']: updatedDeviceIds
+          }
+        };
+        
+        await this.modernAxios.put(endpoint, updatePayload);
+        console.log(`Successfully removed profile ${profileId} from ${deviceIds.length} ${type}(s)`);
+        return;
+      } catch (error: any) {
+        console.error('Modern API failed for removing profile:', error.message);
+      }
+    }
+    
+    // Try Classic API
+    if (this.classicApiAvailable && this.classicAxios) {
+      try {
+        console.log(`Removing ${type} configuration profile ${profileId} using Classic API...`);
+        
+        const endpoint = type === 'computer'
+          ? `/JSSResource/osxconfigurationprofiles/id/${profileId}`
+          : `/JSSResource/mobiledeviceconfigurationprofiles/id/${profileId}`;
+        
+        // For Classic API, we need to update the scope XML
+        const scopeKey = type === 'computer' ? 'computers' : 'mobile_devices';
+        const currentDevices = profile.scope?.[scopeKey] || [];
+        
+        const deviceIdsToRemove = deviceIds.map(id => parseInt(id));
+        const updatedDevices = currentDevices.filter((device: any) => 
+          !deviceIdsToRemove.includes(device.id)
+        );
+        
+        const updatePayload = {
+          [type === 'computer' ? 'os_x_configuration_profile' : 'configuration_profile']: {
+            scope: {
+              [scopeKey]: updatedDevices
+            }
+          }
+        };
+        
+        await this.classicAxios.put(endpoint, updatePayload);
+        console.log(`Successfully removed profile ${profileId} from ${deviceIds.length} ${type}(s) via Classic API`);
+        return;
+      } catch (error) {
+        console.error('Classic API failed for removing profile:', error);
+      }
+    }
+    
+    throw new Error('Unable to remove configuration profile - no API access');
+  }
 }

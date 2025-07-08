@@ -1,20 +1,23 @@
 {
   "name": "jamf-mcp-server",
-  "version": "1.0.0",
-  "description": "MCP server for Jamf Pro device management",
+  "version": "1.2.0",
+  "description": "Comprehensive MCP server for Jamf Pro Apple device management with support for computers, mobile devices, policies, scripts, profiles, packages, and reporting",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/index-main.js",
   "bin": {
-    "jamf-mcp-server": "dist/index.js"
+    "jamf-mcp-server": "dist/index-main.js"
   },
   "scripts": {
-    "build": "tsc && chmod +x dist/index.js",
-    "dev": "tsx src/index.ts",
-    "serve": "node dist/index.js",
-    "inspector": "npx @modelcontextprotocol/inspector dist/index.js",
+    "build": "tsc && chmod +x dist/index-main.js dist/index.js dist/index-enhanced.js",
+    "dev": "tsx src/index-main.ts",
+    "dev:enhanced": "JAMF_USE_ENHANCED_MODE=true tsx src/index-main.ts",
+    "serve": "node dist/index-main.js",
+    "serve:enhanced": "JAMF_USE_ENHANCED_MODE=true node dist/index-main.js",
+    "inspector": "npx @modelcontextprotocol/inspector dist/index-main.js",
     "test": "NODE_OPTIONS='--experimental-vm-modules --no-warnings' jest",
     "test:watch": "NODE_OPTIONS='--experimental-vm-modules' jest --watch",
     "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage",
+    "test:enhanced": "node test-scripts/test-enhanced-error-handling.js",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "typecheck": "tsc --noEmit"

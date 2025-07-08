@@ -33,6 +33,18 @@ export function registerResources(server: Server, jamfClient: any): void {
         description: 'Get a breakdown of operating system versions across all devices',
         mimeType: 'application/json',
       },
+      {
+        uri: 'jamf://inventory/mobile-devices',
+        name: 'Mobile Device Inventory',
+        description: 'Get a paginated list of all mobile devices in Jamf Pro with basic information',
+        mimeType: 'application/json',
+      },
+      {
+        uri: 'jamf://reports/mobile-device-compliance',
+        name: 'Mobile Device Compliance Report',
+        description: 'Generate a compliance report for mobile devices showing management status and issues',
+        mimeType: 'application/json',
+      },
     ];
 
     return { resources };
@@ -114,6 +126,121 @@ export function registerResources(server: Server, jamfClient: any): void {
             type: 'text',
             text: JSON.stringify({
               ...report,
+              generated: new Date().toISOString(),
+            }, null, 2),
+          };
+
+          return { contents: [content] };
+        }
+
+        case 'jamf://inventory/mobile-devices': {
+          const mobileDevices = await jamfClient.searchMobileDevices('', 100);
+          
+          const content: TextContent = {
+            type: 'text',
+            text: JSON.stringify({
+              totalCount: mobileDevices.length,
+              mobileDevices: mobileDevices.map((d: any) => ({
+                id: d.id,
+                name: d.name,
+                serialNumber: d.serial_number || d.serialNumber,
+                udid: d.udid,
+                model: d.model || d.modelDisplay,
+                osVersion: d.os_version || d.osVersion,
+                batteryLevel: d.battery_level || d.batteryLevel,
+                managed: d.managed,
+                supervised: d.supervised,
+                lastInventoryUpdate: d.last_inventory_update || d.lastInventoryUpdate,
+              })),
+              generated: new Date().toISOString(),
+            }, null, 2),
+          };
+
+          return { contents: [content] };
+        }
+
+        case 'jamf://reports/mobile-device-compliance': {
+          const mobileDevices = await jamfClient.searchMobileDevices('', 500);
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          
+          const compliance = {
+            total: mobileDevices.length,
+            managed: 0,
+            unmanaged: 0,
+            supervised: 0,
+            unsupervised: 0,
+            lowBattery: 0,
+            notReporting: 0,
+            issues: [] as any[],
+          };
+
+          for (const device of mobileDevices) {
+            // Check management status
+            if (device.managed) {
+              compliance.managed++;
+            } else {
+              compliance.unmanaged++;
+              compliance.issues.push({
+                deviceId: device.id,
+                deviceName: device.name,
+                issue: 'Not managed',
+                serialNumber: device.serial_number || device.serialNumber,
+              });
+            }
+
+            // Check supervision status
+            if (device.supervised) {
+              compliance.supervised++;
+            } else {
+              compliance.unsupervised++;
+            }
+
+            // Check battery level
+            const batteryLevel = device.battery_level || device.batteryLevel;
+            if (batteryLevel && batteryLevel < 20) {
+              compliance.lowBattery++;
+              compliance.issues.push({
+                deviceId: device.id,
+                deviceName: device.name,
+                issue: `Low battery (${batteryLevel}%)`,
+                serialNumber: device.serial_number || device.serialNumber,
+              });
+            }
+
+            // Check last inventory update
+            const lastUpdate = device.last_inventory_update || device.lastInventoryUpdate;
+            if (lastUpdate) {
+              const updateDate = new Date(lastUpdate);
+              if (updateDate < thirtyDaysAgo) {
+                compliance.notReporting++;
+                compliance.issues.push({
+                  deviceId: device.id,
+                  deviceName: device.name,
+                  issue: 'Not reporting (>30 days)',
+                  lastUpdate: lastUpdate,
+                  serialNumber: device.serial_number || device.serialNumber,
+                });
+              }
+            }
+          }
+
+          const content: TextContent = {
+            type: 'text',
+            text: JSON.stringify({
+              summary: {
+                total: compliance.total,
+                managed: compliance.managed,
+                unmanaged: compliance.unmanaged,
+                supervised: compliance.supervised,
+                unsupervised: compliance.unsupervised,
+                lowBattery: compliance.lowBattery,
+                notReporting: compliance.notReporting,
+                managementRate: ((compliance.managed / compliance.total) * 100).toFixed(2) + '%',
+                supervisionRate: ((compliance.supervised / compliance.total) * 100).toFixed(2) + '%',
+              },
+              issues: compliance.issues,
+              reportPeriodDays: 30,
               generated: new Date().toISOString(),
             }, null, 2),
           };
