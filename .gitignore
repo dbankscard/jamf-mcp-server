@@ -35,9 +35,17 @@ lerna-debug.log*
 
 # Test scripts (development only)
 test-scripts/
+test-*.js
+!src/__tests__/**/*.js
 
-# Local documentation
+# Local documentation and notes
 MULTIPLE_GIT_ACCOUNTS.md
+reddit-post.md
+tool-questions.md
+*_TESTING_GUIDE.md
+*_DEBUG.md
+TROUBLESHOOTING_MCP.md
+TESTING_GUIDE.md
 
 # Temporary files
 *.tmp
