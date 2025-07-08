@@ -38,7 +38,7 @@ Configure your credentials in Claude Desktop (see Configuration section below).
 
 #### Policy Management
 - **listPolicies**: List all policies in Jamf Pro
-- **getPolicyDetails**: Get detailed information about a specific policy by ID or name (includes scope, scripts, and packages with full script content)
+- **getPolicyDetails**: Get detailed information about a specific policy by ID or name (includes scope, scripts with full content, and packages - you can see exactly what scripts and packages are attached to any policy)
 - **searchPolicies**: Search for policies by name or ID (supports partial matching)
 - **executePolicy**: Run policies on specific devices (policy and device can be specified by ID or name, requires confirmation)
 
@@ -167,6 +167,19 @@ This will use the new `checkDeviceCompliance` tool which efficiently processes a
 - Critical devices (90+ days)
 - Warning devices (30-90 days)
 - Optional detailed device list
+
+### Policy Analysis - See Scripts and Packages
+```
+What packages are deployed by the 'Software Install' policy?
+```
+
+```
+Show me the scripts that run in the 'Weekly Maintenance' policy
+```
+
+```
+Get full details for policy 'macOS Updates' including all scripts and packages
+```
 
 ### Configuration Profile Management
 ```
