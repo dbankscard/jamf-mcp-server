@@ -282,6 +282,16 @@ export class JamfApiClient {
     }
   }
 
+  async getScriptDetails(scriptId: string): Promise<any> {
+    try {
+      const response = await this.axios.get(`/api/v1/scripts/${scriptId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to get script details for ${scriptId}:`, error);
+      throw error;
+    }
+  }
+
   async getComplianceReport(days: number = 30): Promise<any> {
     try {
       const cutoffDate = new Date();
@@ -324,6 +334,257 @@ export class JamfApiClient {
       return compliance;
     } catch (error) {
       console.error('Failed to generate compliance report:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * List all packages
+   */
+  async listPackages(limit: number = 100): Promise<any[]> {
+    try {
+      const response = await this.axios.get('/api/v1/packages', {
+        params: {
+          'page-size': limit,
+        },
+      });
+      return response.data.results || [];
+    } catch (error) {
+      console.error('Failed to list packages:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get package details
+   */
+  async getPackageDetails(packageId: string): Promise<any> {
+    try {
+      const response = await this.axios.get(`/api/v1/packages/${packageId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to get package details for ${packageId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search packages by name
+   */
+  async searchPackages(query: string, limit: number = 100): Promise<any[]> {
+    try {
+      // Modern API doesn't have direct search, so get all and filter
+      const response = await this.axios.get('/api/v1/packages', {
+        params: {
+          'page-size': 1000, // Get more to search through
+        },
+      });
+      
+      const packages = response.data.results || [];
+      if (!query) {
+        return packages.slice(0, limit);
+      }
+      
+      const lowerQuery = query.toLowerCase();
+      const filtered = packages.filter((p: any) => 
+        p.fileName?.toLowerCase().includes(lowerQuery) ||
+        p.name?.toLowerCase().includes(lowerQuery) ||
+        p.category?.toLowerCase().includes(lowerQuery)
+      );
+      
+      return filtered.slice(0, limit);
+    } catch (error) {
+      console.error('Failed to search packages:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get package deployment history
+   */
+  async getPackageDeploymentHistory(packageId: string): Promise<any> {
+    try {
+      // Package deployment history is typically tracked through policies
+      // First get the package details to understand its usage
+      const packageDetails = await this.getPackageDetails(packageId);
+      
+      // Modern API doesn't have a direct way to get policies using a package
+      // This would typically require Classic API access
+      return {
+        package: {
+          id: packageDetails.id,
+          name: packageDetails.name || packageDetails.fileName,
+          category: packageDetails.category,
+          size: packageDetails.size,
+        },
+        deploymentInfo: {
+          note: 'Deployment history requires Classic API access for policy information',
+        },
+      };
+    } catch (error) {
+      console.error('Failed to get package deployment history:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get policies using a specific package
+   */
+  async getPoliciesUsingPackage(packageId: string): Promise<any[]> {
+    // Modern API doesn't have a direct way to get policies
+    // This would typically require Classic API access
+    console.warn('Getting policies using package requires Classic API access');
+    return [];
+  }
+
+  /**
+   * Search mobile devices
+   */
+  async searchMobileDevices(query: string, limit: number = 100): Promise<any[]> {
+    try {
+      const response = await this.axios.get('/api/v2/mobile-devices', {
+        params: {
+          'page-size': limit,
+          'filter': query ? `name=="*${query}*",serialNumber=="*${query}*",udid=="*${query}*"` : undefined,
+        },
+      });
+      
+      return response.data.results || [];
+    } catch (error) {
+      console.error('Failed to search mobile devices:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get mobile device details
+   */
+  async getMobileDeviceDetails(deviceId: string): Promise<any> {
+    try {
+      const response = await this.axios.get(`/api/v2/mobile-devices/${deviceId}/detail`);
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to get mobile device details for ${deviceId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * List all mobile devices
+   */
+  async listMobileDevices(limit: number = 100): Promise<any[]> {
+    return this.searchMobileDevices('', limit);
+  }
+
+  /**
+   * Update mobile device inventory
+   */
+  async updateMobileDeviceInventory(deviceId: string): Promise<void> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot update mobile device inventory in read-only mode');
+    }
+    
+    try {
+      await this.axios.post(`/api/v2/mobile-devices/${deviceId}/update-inventory`);
+      console.error(`Mobile device inventory update requested for device ${deviceId}`);
+    } catch (error) {
+      console.error('Failed to update mobile device inventory:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send MDM command to mobile device
+   */
+  async sendMDMCommand(deviceId: string, command: string): Promise<void> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot send MDM commands in read-only mode');
+    }
+    
+    // Validate command
+    const validCommands = [
+      'DeviceLock',
+      'EraseDevice',
+      'ClearPasscode',
+      'RestartDevice',
+      'ShutDownDevice',
+      'EnableLostMode',
+      'DisableLostMode',
+      'PlayLostModeSound',
+      'UpdateInventory',
+      'ClearRestrictionsPassword',
+      'SettingsEnableBluetooth',
+      'SettingsDisableBluetooth',
+      'SettingsEnableWiFi',
+      'SettingsDisableWiFi',
+      'SettingsEnableDataRoaming',
+      'SettingsDisableDataRoaming',
+      'SettingsEnableVoiceRoaming',
+      'SettingsDisableVoiceRoaming',
+      'SettingsEnablePersonalHotspot',
+      'SettingsDisablePersonalHotspot'
+    ];
+    
+    if (!validCommands.includes(command)) {
+      throw new Error(`Invalid MDM command: ${command}. Valid commands are: ${validCommands.join(', ')}`);
+    }
+    
+    try {
+      // Modern API uses different endpoints for different commands
+      if (command === 'DeviceLock') {
+        await this.axios.post(`/api/v2/mobile-devices/${deviceId}/lock`);
+      } else if (command === 'EraseDevice') {
+        await this.axios.post(`/api/v2/mobile-devices/${deviceId}/erase`);
+      } else if (command === 'ClearPasscode') {
+        await this.axios.post(`/api/v2/mobile-devices/${deviceId}/clear-passcode`);
+      } else {
+        // Generic command endpoint
+        await this.axios.post(`/api/v2/mobile-devices/${deviceId}/commands`, {
+          commandType: command,
+        });
+      }
+      
+      console.error(`Successfully sent MDM command '${command}' to device ${deviceId}`);
+    } catch (error) {
+      console.error('Failed to send MDM command:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * List mobile device groups
+   */
+  async getMobileDeviceGroups(type: 'smart' | 'static' | 'all' = 'all'): Promise<any[]> {
+    try {
+      const response = await this.axios.get('/api/v1/mobile-device-groups', {
+        params: {
+          'page-size': 1000,
+        },
+      });
+      
+      let groups = response.data.results || [];
+      
+      // Filter by type if requested
+      if (type !== 'all') {
+        groups = groups.filter((g: any) => g.isSmart === (type === 'smart'));
+      }
+      
+      return groups;
+    } catch (error) {
+      console.error('Failed to list mobile device groups:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get mobile device group details
+   */
+  async getMobileDeviceGroupDetails(groupId: string): Promise<any> {
+    try {
+      const response = await this.axios.get(`/api/v1/mobile-device-groups/${groupId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to get mobile device group details for ${groupId}:`, error);
       throw error;
     }
   }
