@@ -56,13 +56,15 @@ describe('Resources', () => {
       
       const result = await handler({} as any);
 
-      expect(result.resources).toHaveLength(4);
+      expect(result.resources).toHaveLength(6);
       
       const resourceUris = result.resources.map((r: Resource) => r.uri);
       expect(resourceUris).toContain('jamf://inventory/computers');
       expect(resourceUris).toContain('jamf://reports/compliance');
       expect(resourceUris).toContain('jamf://reports/storage');
       expect(resourceUris).toContain('jamf://reports/os-versions');
+      expect(resourceUris).toContain('jamf://inventory/mobile-devices');
+      expect(resourceUris).toContain('jamf://reports/mobile-device-compliance');
 
       // Check resource details
       const inventoryResource = result.resources.find((r: Resource) => r.uri === 'jamf://inventory/computers');
