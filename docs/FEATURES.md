@@ -210,8 +210,16 @@ Process multiple devices at once:
 "Show me policy 456 including the actual script code"
 "Get 'Disk Cleanup' policy with script contents"
 
-# Full policy information
-"Get complete details for the 'Weekly Maintenance' policy"
+# See what packages are deployed by a policy
+"What packages does the 'Software Install' policy deploy?"
+"Show me all packages attached to policy ID 123"
+
+# See what scripts run in a policy
+"What scripts are included in the 'Maintenance' policy?"
+"Show me the actual script code that runs in policy 'Weekly Cleanup'"
+
+# Full policy information with all payloads
+"Get complete details for the 'Weekly Maintenance' policy including all scripts and packages"
 ```
 
 ### Execute Policies
