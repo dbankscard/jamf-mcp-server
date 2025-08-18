@@ -1,0 +1,17 @@
+# Lambda dependencies for Slack handler
+
+# Slack SDK
+slack-sdk>=3.26.0
+
+# AWS SDK (minimal - Lambda runtime provides boto3)
+boto3>=1.28.0
+
+# MCP client dependencies
+httpx>=0.24.0
+mcp>=0.1.0
+
+# Async support
+aiohttp>=3.8.0
+
+# JSON parsing
+pydantic>=2.0.0

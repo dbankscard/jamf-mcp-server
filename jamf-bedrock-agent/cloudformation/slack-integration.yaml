@@ -1,0 +1,323 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Slack integration for Jamf Bedrock Agent with MCP server'
+
+Parameters:
+  SlackBotToken:
+    Type: String
+    Description: Slack bot OAuth token (xoxb-...)
+    NoEcho: true
+  
+  SlackSigningSecret:
+    Type: String
+    Description: Slack app signing secret
+    NoEcho: true
+  
+  SlackAppId:
+    Type: String
+    Description: Slack app ID
+  
+  MCPServerUrl:
+    Type: String
+    Description: URL of the deployed MCP server (ECS service)
+    Default: "http://jamf-mcp-alb.internal:3000"
+  
+  BedrockModelId:
+    Type: String
+    Default: "anthropic.claude-3-sonnet-20240229-v1:0"
+    Description: Bedrock model ID for agents
+  
+  SupervisorModelId:
+    Type: String
+    Default: "anthropic.claude-3-5-sonnet-20240620-v1:0"
+    Description: Bedrock model ID for orchestrator agent
+
+Resources:
+  # DynamoDB table for session management
+  SessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: jamf-agent-sessions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Application
+          Value: JamfBedrockAgent
+
+  # Lambda execution role
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: BedrockAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: 
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/*'
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                Resource: !GetAtt SessionsTable.Arn
+        - PolicyName: SecretsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref SlackSecrets
+
+  # Store Slack credentials securely
+  SlackSecrets:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: jamf-slack-credentials
+      Description: Slack app credentials
+      SecretString: !Sub |
+        {
+          "bot_token": "${SlackBotToken}",
+          "signing_secret": "${SlackSigningSecret}",
+          "app_id": "${SlackAppId}"
+        }
+
+  # Lambda layer for InlineAgent SDK
+  InlineAgentLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: inline-agent-sdk
+      Description: AWS Bedrock InlineAgent SDK from samples
+      Content:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: layers/inline-agent-layer.zip
+      CompatibleRuntimes:
+        - python3.11
+        - python3.12
+
+  # Lambda function for Slack handler
+  SlackHandlerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: jamf-slack-handler
+      Runtime: python3.11
+      Handler: slack_handler.lambda_handler
+      Code:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: lambda/slack-handler.zip
+      Environment:
+        Variables:
+          SLACK_BOT_TOKEN: !Sub '{{resolve:secretsmanager:${SlackSecrets}:SecretString:bot_token}}'
+          SLACK_SIGNING_SECRET: !Sub '{{resolve:secretsmanager:${SlackSecrets}:SecretString:signing_secret}}'
+          SLACK_APP_ID: !Sub '{{resolve:secretsmanager:${SlackSecrets}:SecretString:app_id}}'
+          SESSIONS_TABLE_NAME: !Ref SessionsTable
+          MCP_SERVER_URL: !Ref MCPServerUrl
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          SUPERVISOR_MODEL_ID: !Ref SupervisorModelId
+          ENVIRONMENT: production
+      Layers:
+        - !Ref InlineAgentLayer
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300
+      MemorySize: 1024
+      VpcConfig:
+        SubnetIds:
+          - !ImportValue JamfMCP-PrivateSubnet1
+          - !ImportValue JamfMCP-PrivateSubnet2
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+
+  # Security group for Lambda
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Slack Lambda function
+      VpcId: !ImportValue JamfMCP-VPC
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS for Slack API
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          DestinationSecurityGroupId: !ImportValue JamfMCP-ECSSecurityGroup
+          Description: Access to MCP server
+      Tags:
+        - Key: Name
+          Value: jamf-slack-lambda-sg
+
+  # API Gateway for Slack webhooks
+  SlackApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: jamf-slack-api
+      ProtocolType: HTTP
+      Description: API Gateway for Slack webhooks
+      CorsConfiguration:
+        AllowOrigins:
+          - https://slack.com
+        AllowMethods:
+          - POST
+        AllowHeaders:
+          - content-type
+          - x-slack-request-timestamp
+          - x-slack-signature
+
+  # Lambda integration
+  LambdaIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref SlackApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SlackHandlerFunction.Arn}/invocations'
+      PayloadFormatVersion: '2.0'
+
+  # Routes for Slack
+  SlashCommandRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref SlackApi
+      RouteKey: 'POST /slack/commands'
+      Target: !Sub 'integrations/${LambdaIntegration}'
+
+  EventsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref SlackApi
+      RouteKey: 'POST /slack/events'
+      Target: !Sub 'integrations/${LambdaIntegration}'
+
+  InteractiveRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref SlackApi
+      RouteKey: 'POST /slack/interactive'
+      Target: !Sub 'integrations/${LambdaIntegration}'
+
+  # API Gateway stage
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref SlackApi
+      StageName: prod
+      AutoDeploy: true
+
+  # Lambda permissions for API Gateway
+  LambdaApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SlackHandlerFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SlackApi}/*/*'
+
+  # S3 bucket for deployment artifacts
+  DeploymentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'jamf-slack-deployment-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  # CloudWatch Log Group for Lambda
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${SlackHandlerFunction}'
+      RetentionInDays: 30
+
+  # CloudWatch Alarms
+  LambdaErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: jamf-slack-lambda-errors
+      AlarmDescription: Alert on Lambda function errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SlackHandlerFunction
+      TreatMissingData: notBreaching
+
+  LambdaThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: jamf-slack-lambda-throttles
+      AlarmDescription: Alert on Lambda throttling
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SlackHandlerFunction
+      TreatMissingData: notBreaching
+
+Outputs:
+  SlackWebhookUrl:
+    Description: Webhook URL for Slack app configuration
+    Value: !Sub 'https://${SlackApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
+  
+  SlashCommandUrl:
+    Description: URL for Slack slash commands
+    Value: !Sub 'https://${SlackApi}.execute-api.${AWS::Region}.amazonaws.com/prod/slack/commands'
+  
+  EventsUrl:
+    Description: URL for Slack events
+    Value: !Sub 'https://${SlackApi}.execute-api.${AWS::Region}.amazonaws.com/prod/slack/events'
+  
+  InteractiveUrl:
+    Description: URL for Slack interactive components
+    Value: !Sub 'https://${SlackApi}.execute-api.${AWS::Region}.amazonaws.com/prod/slack/interactive'
+  
+  DeploymentBucket:
+    Description: S3 bucket for deployment artifacts
+    Value: !Ref DeploymentBucket
+  
+  LambdaFunctionArn:
+    Description: ARN of the Slack handler Lambda function
+    Value: !GetAtt SlackHandlerFunction.Arn
