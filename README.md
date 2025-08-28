@@ -417,3 +417,6 @@ Contributions are welcome! Please:
 ## License
 
 MIT
+
+
+[![MCP Badge](https://lobehub.com/badge/mcp/dbanks-gh-jamf-mcp-server)](https://lobehub.com/mcp/dbanks-gh-jamf-mcp-server)
