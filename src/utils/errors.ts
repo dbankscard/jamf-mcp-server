@@ -40,7 +40,7 @@ export class JamfAPIError extends Error {
     const errorData = error.response?.data as any;
     
     let message = error.message;
-    let errorCode = errorData?.errorCode || errorData?.code;
+    const errorCode = errorData?.errorCode || errorData?.code;
     let suggestions: string[] = [];
 
     // Handle common HTTP status codes with helpful suggestions

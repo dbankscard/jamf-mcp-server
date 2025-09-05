@@ -243,7 +243,7 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/api/v1/computers-inventory', {
         params: {
           'page-size': limit,
-          'filter': query ? `general.name=="*${query}*",general.serialNumber=="*${query}*"` : undefined,
+          'filter': query ? `general.name=~"${query}"` : undefined,
         },
       });
       
@@ -2582,7 +2582,7 @@ export class JamfApiClientHybrid {
           const searchData = checkInMap.get(computer.id) || {};
           
           // Try to get check-in time from various possible fields
-          let checkInTime = searchData.Last_Check_in || 
+          const checkInTime = searchData.Last_Check_in || 
                            searchData['Last Check-in'] || 
                            searchData.last_contact_time ||
                            searchData.Last_Contact_Time ||
