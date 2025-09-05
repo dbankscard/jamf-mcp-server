@@ -5,10 +5,11 @@
   "type": "module",
   "main": "dist/index-main.js",
   "bin": {
-    "jamf-mcp-server": "dist/index-main.js"
+    "jamf-mcp-server": "dist/index-main.js",
+    "jamf-agent": "dist/agent/interface/CLIInterface.js"
   },
   "scripts": {
-    "build": "tsc && chmod +x dist/index-main.js dist/index.js dist/index-enhanced.js",
+    "build": "tsc && chmod +x dist/index-main.js dist/index.js dist/index-enhanced.js dist/agent/interface/CLIInterface.js",
     "dev": "tsx src/index-main.ts",
     "dev:enhanced": "JAMF_USE_ENHANCED_MODE=true tsx src/index-main.ts",
     "serve": "node dist/index-main.js",
@@ -20,7 +21,11 @@
     "test:enhanced": "node test-scripts/test-enhanced-error-handling.js",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "agent": "tsx src/agent/interface/CLIInterface.ts",
+    "agent:simple": "tsx src/agent/simple-cli.ts",
+    "agent:example": "tsx examples/agent-example.ts",
+    "agent:demo": "tsx examples/agent-demo.ts"
   },
   "keywords": ["mcp", "jamf", "mdm", "apple", "device-management"],
   "author": "dbankscard",
@@ -36,7 +41,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "axios": "^1.7.0",
-    "zod": "^3.23.0"
+    "zod": "^3.23.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
