@@ -9,6 +9,14 @@ A comprehensive MCP (Model Context Protocol) server that enables AI assistants t
 
 ![Tests](https://github.com/dbankscard/jamf-mcp-server/actions/workflows/test.yml/badge.svg)
 
+## 🔐 Security Notice
+
+**IMPORTANT**: Before using this server:
+1. Copy `.env.example` to `.env` and fill in your credentials
+2. Never commit `.env` or any files containing credentials
+3. Review and update any shell scripts with your own credentials
+4. If credentials were accidentally exposed, rotate them immediately
+
 ## 🚀 Quick Start
 
 ```bash
