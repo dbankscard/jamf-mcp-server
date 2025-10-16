@@ -1,0 +1,103 @@
+{
+  "family": "jamf-mcp-server",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/jamf-mcp-task-role",
+  "containerDefinitions": [
+    {
+      "name": "jamf-mcp-server",
+      "image": "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/jamf-mcp-server:latest",
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        {"name": "NODE_ENV", "value": "production"},
+        {"name": "PORT", "value": "3000"},
+        {"name": "OAUTH_PROVIDER", "value": "auth0"},
+        {"name": "OAUTH_REDIRECT_URI", "value": "https://chatgpt.com/auth/callback"},
+        {"name": "JAMF_READ_ONLY", "value": "false"},
+        {"name": "JAMF_USE_ENHANCED_MODE", "value": "true"},
+        {"name": "LOG_LEVEL", "value": "info"},
+        {"name": "RATE_LIMIT_WINDOW", "value": "900000"},
+        {"name": "RATE_LIMIT_MAX", "value": "100"},
+        {"name": "ALLOWED_ORIGINS", "value": "https://chat.openai.com,https://chatgpt.com"}
+      ],
+      "secrets": [
+        {
+          "name": "JAMF_URL",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:jamf-mcp-server/production:JAMF_URL::"
+        },
+        {
+          "name": "JAMF_CLIENT_ID",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:jamf-mcp-server/production:JAMF_CLIENT_ID::"
+        },
+        {
+          "name": "JAMF_CLIENT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:jamf-mcp-server/production:JAMF_CLIENT_SECRET::"
+        },
+        {
+          "name": "AUTH0_DOMAIN",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:jamf-mcp-server/production:AUTH0_DOMAIN::"
+        },
+        {
+          "name": "AUTH0_CLIENT_ID",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:jamf-mcp-server/production:AUTH0_CLIENT_ID::"
+        },
+        {
+          "name": "AUTH0_CLIENT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:jamf-mcp-server/production:AUTH0_CLIENT_SECRET::"
+        },
+        {
+          "name": "AUTH0_AUDIENCE",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:jamf-mcp-server/production:AUTH0_AUDIENCE::"
+        },
+        {
+          "name": "REQUIRED_SCOPES",
+          "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:jamf-mcp-server/production:REQUIRED_SCOPES::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/jamf-mcp-server",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 40
+      },
+      "ulimits": [
+        {
+          "name": "nofile",
+          "softLimit": 65536,
+          "hardLimit": 65536
+        }
+      ],
+      "mountPoints": [],
+      "volumesFrom": []
+    }
+  ],
+  "tags": [
+    {
+      "key": "Application",
+      "value": "jamf-mcp-server"
+    },
+    {
+      "key": "Environment",
+      "value": "production"
+    }
+  ]
+}
