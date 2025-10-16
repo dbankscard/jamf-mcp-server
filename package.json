@@ -5,14 +5,17 @@
   "type": "module",
   "main": "dist/index-main.js",
   "bin": {
-    "jamf-mcp-server": "dist/index-main.js"
+    "jamf-mcp-server": "dist/index-main.js",
+    "jamf-mcp-http": "dist/index-http.js"
   },
   "scripts": {
-    "build": "tsc && chmod +x dist/index-main.js dist/index.js dist/index-enhanced.js",
+    "build": "tsc && chmod +x dist/index-main.js dist/index.js dist/index-enhanced.js dist/index-http.js",
     "dev": "tsx src/index-main.ts",
     "dev:enhanced": "JAMF_USE_ENHANCED_MODE=true tsx src/index-main.ts",
     "serve": "node dist/index-main.js",
     "serve:enhanced": "JAMF_USE_ENHANCED_MODE=true node dist/index-main.js",
+    "serve:http": "tsx src/server/http-server.ts",
+    "serve:http:prod": "node dist/server/http-server.js",
     "inspector": "npx @modelcontextprotocol/inspector dist/index-main.js",
     "test": "NODE_OPTIONS='--experimental-vm-modules --no-warnings' jest",
     "test:watch": "NODE_OPTIONS='--experimental-vm-modules' jest --watch",
@@ -36,7 +39,12 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "axios": "^1.7.0",
-    "zod": "^3.23.0"
+    "zod": "^3.23.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.1.0",
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -47,6 +55,9 @@
     "ts-jest": "^29.2.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
-    "eslint": "^8.0.0"
+    "eslint": "^8.0.0",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/jsonwebtoken": "^9.0.5"
   }
 }
