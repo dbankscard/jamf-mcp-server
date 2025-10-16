@@ -1,115 +1,287 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import jwksRsa from 'jwks-rsa';
+import { createLogger } from './logger.js';
 
-// OAuth2 configuration from environment
-const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN;
-const AUTH0_AUDIENCE = process.env.AUTH0_AUDIENCE;
-const OAUTH_PROVIDER = process.env.OAUTH_PROVIDER || 'auth0';
+const logger = createLogger('auth-middleware');
 
-// Simple in-memory token validation for development
-// In production, use proper OAuth2 validation
-const validateToken = async (token: string): Promise<any> => {
-  if (!token) {
-    throw new Error('No token provided');
-  }
+// Cache for JWKS clients to avoid recreating them
+const jwksClients = new Map<string, jwksRsa.JwksClient>();
 
-  // For Auth0
-  if (OAUTH_PROVIDER === 'auth0' && AUTH0_DOMAIN) {
+interface TokenPayload {
+  sub: string;
+  aud?: string | string[];
+  iss?: string;
+  exp?: number;
+  iat?: number;
+  scope?: string;
+  permissions?: string[];
+  [key: string]: any;
+}
+
+// Get or create JWKS client with caching
+const getJwksClient = (domain: string): jwksRsa.JwksClient => {
+  const cacheKey = domain;
+  
+  if (!jwksClients.has(cacheKey)) {
     const client = jwksRsa({
-      jwksUri: `https://${AUTH0_DOMAIN}/.well-known/jwks.json`,
+      jwksUri: `https://${domain}/.well-known/jwks.json`,
       cache: true,
+      cacheMaxEntries: 5,
+      cacheMaxAge: 600000, // 10 minutes
       rateLimit: true,
-      jwksRequestsPerMinute: 5,
+      jwksRequestsPerMinute: 10,
+      timeout: 30000, // 30 seconds
     });
-
-    const getKey = (header: any, callback: any) => {
-      client.getSigningKey(header.kid, (err: any, key: any) => {
-        if (err) {
-          callback(err);
-        } else {
-          const signingKey = key.getPublicKey();
-          callback(null, signingKey);
-        }
-      });
-    };
-
-    return new Promise((resolve, reject) => {
-      jwt.verify(
-        token,
-        getKey as any,
-        {
-          audience: AUTH0_AUDIENCE,
-          issuer: `https://${AUTH0_DOMAIN}/`,
-          algorithms: ['RS256'],
-        },
-        (err, decoded) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve(decoded);
-          }
-        }
-      );
-    });
+    jwksClients.set(cacheKey, client);
   }
-
-  // For development/testing with a simple JWT
-  if (OAUTH_PROVIDER === 'dev') {
-    const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
-    return jwt.verify(token, JWT_SECRET);
-  }
-
-  throw new Error('OAuth provider not configured');
+  
+  return jwksClients.get(cacheKey)!;
 };
 
+// Validate Auth0 token
+const validateAuth0Token = async (token: string): Promise<TokenPayload> => {
+  const domain = process.env.AUTH0_DOMAIN;
+  const audience = process.env.AUTH0_AUDIENCE;
+  
+  if (!domain) {
+    throw new Error('AUTH0_DOMAIN not configured');
+  }
+  
+  const client = getJwksClient(domain);
+  
+  return new Promise((resolve, reject) => {
+    const verifyOptions: jwt.VerifyOptions = {
+      audience,
+      issuer: `https://${domain}/`,
+      algorithms: ['RS256'],
+      complete: false,
+    };
+
+    jwt.verify(token, (header, callback) => {
+      if (!header.kid) {
+        return callback(new Error('No kid specified in token header'));
+      }
+      
+      client.getSigningKey(header.kid, (err, key) => {
+        if (err) {
+          return callback(err);
+        }
+        if (!key) {
+          return callback(new Error('No signing key found'));
+        }
+        
+        const signingKey = 'publicKey' in key ? key.publicKey : key.rsaPublicKey;
+        callback(null, signingKey);
+      });
+    }, verifyOptions, (err, decoded) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(decoded as TokenPayload);
+      }
+    });
+  });
+};
+
+// Validate Okta token
+const validateOktaToken = async (token: string): Promise<TokenPayload> => {
+  const domain = process.env.OKTA_DOMAIN;
+  const clientId = process.env.OKTA_CLIENT_ID;
+  
+  if (!domain) {
+    throw new Error('OKTA_DOMAIN not configured');
+  }
+  
+  const issuer = domain.includes('oauth2') ? domain : `${domain}/oauth2/default`;
+  const client = getJwksClient(issuer.replace('https://', ''));
+  
+  return new Promise((resolve, reject) => {
+    const verifyOptions: jwt.VerifyOptions = {
+      audience: clientId,
+      issuer,
+      algorithms: ['RS256'],
+      complete: false,
+    };
+
+    jwt.verify(token, (header, callback) => {
+      if (!header.kid) {
+        return callback(new Error('No kid specified in token header'));
+      }
+      
+      client.getSigningKey(header.kid, (err, key) => {
+        if (err) {
+          return callback(err);
+        }
+        if (!key) {
+          return callback(new Error('No signing key found'));
+        }
+        
+        const signingKey = 'publicKey' in key ? key.publicKey : key.rsaPublicKey;
+        callback(null, signingKey);
+      });
+    }, verifyOptions, (err, decoded) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(decoded as TokenPayload);
+      }
+    });
+  });
+};
+
+// Validate token based on provider
+const validateToken = async (token: string): Promise<TokenPayload> => {
+  if (!token || typeof token !== 'string') {
+    throw new Error('Invalid token format');
+  }
+
+  const provider = process.env.OAUTH_PROVIDER || 'auth0';
+  
+  try {
+    switch (provider) {
+      case 'auth0':
+        return await validateAuth0Token(token);
+        
+      case 'okta':
+        return await validateOktaToken(token);
+        
+      case 'dev':
+        // Development mode - use local JWT validation
+        if (process.env.NODE_ENV !== 'development') {
+          throw new Error('Dev mode authentication only available in development environment');
+        }
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+          throw new Error('JWT_SECRET not configured for dev mode');
+        }
+        return jwt.verify(token, secret) as TokenPayload;
+        
+      default:
+        throw new Error(`Unsupported OAuth provider: ${provider}`);
+    }
+  } catch (error) {
+    // Add more context to JWT errors
+    if (error instanceof jwt.JsonWebTokenError) {
+      if (error.message === 'jwt expired') {
+        throw new Error('Token has expired');
+      }
+      if (error.message === 'invalid signature') {
+        throw new Error('Token signature is invalid');
+      }
+      throw new Error(`Token validation failed: ${error.message}`);
+    }
+    throw error;
+  }
+};
+
+// Extended Request interface
+interface AuthenticatedRequest extends Request {
+  user?: TokenPayload;
+  authInfo?: {
+    token: string;
+    tokenType: string;
+  };
+}
+
 export const authMiddleware = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
+  const startTime = Date.now();
+  
   try {
     // Extract token from Authorization header
     const authHeader = req.headers.authorization;
     if (!authHeader) {
-      return res.status(401).json({ error: 'No authorization header' });
+      logger.warn('Missing authorization header', {
+        ip: req.ip,
+        path: req.path,
+      });
+      res.status(401).json({ error: 'Missing authorization header' });
+      return;
     }
 
-    const parts = authHeader.split(' ');
-    if (parts.length !== 2 || parts[0] !== 'Bearer') {
-      return res.status(401).json({ error: 'Invalid authorization format' });
+    // Validate header format
+    const headerParts = authHeader.split(' ');
+    if (headerParts.length !== 2) {
+      res.status(401).json({ error: 'Invalid authorization header format' });
+      return;
     }
 
-    const token = parts[1];
+    const [scheme, token] = headerParts;
+    if (scheme.toLowerCase() !== 'bearer') {
+      res.status(401).json({ error: 'Invalid authentication scheme' });
+      return;
+    }
 
-    // Validate the token
+    // Validate token
     const decoded = await validateToken(token);
     
+    // Check token expiration
+    if (decoded.exp && decoded.exp * 1000 < Date.now()) {
+      res.status(401).json({ error: 'Token has expired' });
+      return;
+    }
+    
     // Add user information to request
-    (req as any).user = decoded;
+    req.user = decoded;
+    req.authInfo = {
+      token,
+      tokenType: 'Bearer',
+    };
 
-    // Check for required scopes if needed
-    const requiredScopes = process.env.REQUIRED_SCOPES?.split(' ') || [];
-    if (requiredScopes.length > 0 && decoded.scope) {
-      const userScopes = decoded.scope.split(' ');
+    // Check for required scopes
+    const requiredScopes = process.env.REQUIRED_SCOPES?.split(' ').filter(Boolean) || [];
+    if (requiredScopes.length > 0) {
+      const userScopes = decoded.scope?.split(' ') || [];
+      const userPermissions = decoded.permissions || [];
+      const allUserScopes = [...userScopes, ...userPermissions];
+      
       const hasRequiredScopes = requiredScopes.every(scope => 
-        userScopes.includes(scope)
+        allUserScopes.includes(scope)
       );
       
       if (!hasRequiredScopes) {
-        return res.status(403).json({ 
+        logger.warn('Insufficient permissions', {
+          user: decoded.sub,
+          required: requiredScopes,
+          provided: allUserScopes,
+        });
+        res.status(403).json({ 
           error: 'Insufficient permissions',
           required: requiredScopes,
         });
+        return;
       }
     }
 
+    logger.info('Authentication successful', {
+      user: decoded.sub,
+      provider: process.env.OAUTH_PROVIDER,
+      duration: Date.now() - startTime,
+    });
+
     next();
   } catch (error) {
-    console.error('Authentication error:', error);
-    return res.status(401).json({ 
-      error: 'Authentication failed',
-      details: error instanceof Error ? error.message : 'Unknown error',
+    const duration = Date.now() - startTime;
+    
+    logger.error('Authentication failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      ip: req.ip,
+      path: req.path,
+      duration,
+    });
+    
+    // Don't expose internal error details in production
+    const errorMessage = process.env.NODE_ENV === 'development' && error instanceof Error
+      ? error.message
+      : 'Authentication failed';
+    
+    res.status(401).json({ 
+      error: errorMessage,
     });
   }
 };
