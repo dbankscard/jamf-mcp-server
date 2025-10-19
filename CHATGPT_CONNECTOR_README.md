@@ -22,7 +22,7 @@ Connect ChatGPT to your Jamf Pro instance using the Model Context Protocol (MCP)
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/jamf-mcp-server.git
+git clone https://github.com/dbankscard/jamf-mcp-server.git
 cd jamf-mcp-server
 
 # Install dependencies
@@ -87,6 +87,7 @@ ngrok http 3000
 
 1. Go to [ChatGPT](https://chat.openai.com)
 2. Click on your profile → "Apps & Connectors"
+   ![Apps & Connectors Page](docs/images/chatgpt-apps-connectors-page.png)
 3. Click "Create" button in the top right
 4. Select "New Connector BETA"
 5. Fill in the connector details:
@@ -94,6 +95,7 @@ ngrok http 3000
    - **Description**: Connect to Jamf Pro device management
    - **MCP Server URL**: `https://your-tunnel-url.trycloudflare.com`
    - **Authentication**: Select "None" for POC testing
+   ![New Connector Form](docs/images/chatgpt-new-connector-form.png)
 6. Click "Create" to save the connector
 7. The connector will appear in your "Enabled apps & connectors" list with a "DEV" label
 
@@ -206,6 +208,6 @@ This project is licensed under the MIT License.
 ## Support
 
 For issues and questions:
-- Create an issue in the GitHub repository
+- Create an issue in the [GitHub repository](https://github.com/dbankscard/jamf-mcp-server/issues)
 - Check existing documentation in `/docs`
 - Review server logs for detailed error information
