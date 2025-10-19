@@ -1,13 +1,13 @@
-# Jamf MCP Server - ChatGPT Connector
+# Jamf MCP Server - ChatGPT Connector POC
 
-This proof of concept demonstrates how to connect ChatGPT to your Jamf Pro instance using the Model Context Protocol (MCP).
+Connect ChatGPT to your Jamf Pro instance using the Model Context Protocol (MCP). Query devices using natural language!
 
 ## Features
 
-- Query Jamf devices directly from ChatGPT
-- Check device compliance status
-- No authentication required for POC (development mode)
-- Secure tunnel support for local testing
+- 🔍 Search devices by name, serial number, or user
+- 📊 Check device compliance status  
+- 🚀 No authentication required for POC
+- 🔒 Secure tunnel support via Cloudflare
 
 ## Quick Start
 
@@ -90,7 +90,7 @@ ngrok http 3000
 3. Go to "Configure" tab
 4. Under "Actions", click "Create new action"
 5. Choose "Import from URL"
-6. Enter: `https://your-tunnel-url.trycloudflare.com/chatgpt-simple-api.json`
+6. Enter: `https://your-tunnel-url.trycloudflare.com/chatgpt-openapi-schema.json`
 7. Set Authentication to "None"
 8. Save the GPT
 

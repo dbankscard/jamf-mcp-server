@@ -20,6 +20,7 @@ import {
   validateTokenRefresh,
   requestIdMiddleware 
 } from './validation-middleware.js';
+import path from 'path';
 
 // Load environment variables
 dotenv.config();
@@ -99,6 +100,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     logger.info(`Request completed: ${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`);
   });
   next();
+});
+
+// Serve OpenAPI schema for ChatGPT
+app.get('/chatgpt-openapi-schema.json', (_req: Request, res: Response) => {
+  res.sendFile('chatgpt-openapi-schema.json', { root: path.join(process.cwd(), 'public') });
 });
 
 // ChatGPT endpoints (no auth required for POC)
