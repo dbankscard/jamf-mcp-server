@@ -25,6 +25,14 @@ Ask ChatGPT natural language questions about your Jamf devices:
 - "Search for devices assigned to the marketing department"
 - "List computers with low disk space"
 
+### Example in Action
+
+<p align="center">
+  <img src="docs/images/chatgpt-jamf-query-example.png" alt="ChatGPT querying Jamf for a device" width="600">
+</p>
+
+The MCP connector seamlessly integrates with ChatGPT, allowing natural language queries that search your Jamf Pro inventory and return device information.
+
 ## 📋 Prerequisites
 
 - Node.js 18+ installed
