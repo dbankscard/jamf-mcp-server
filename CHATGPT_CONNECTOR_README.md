@@ -1,6 +1,6 @@
 # Jamf MCP Server - ChatGPT Connector POC
 
-Connect ChatGPT to your Jamf Pro instance using the Model Context Protocol (MCP). Query devices using natural language!
+Connect ChatGPT to your Jamf Pro instance using the Model Context Protocol (MCP) through ChatGPT's new MCP Connector feature (BETA). Query devices using natural language!
 
 ## Features
 
@@ -15,7 +15,7 @@ Connect ChatGPT to your Jamf Pro instance using the Model Context Protocol (MCP)
 
 - Node.js 18+ installed
 - Jamf Pro instance with API credentials
-- ChatGPT Plus subscription (for custom GPTs)
+- ChatGPT Plus subscription (for MCP Connectors)
 - Cloudflare or ngrok account (for tunneling)
 
 ### 1. Clone and Setup
@@ -83,20 +83,23 @@ brew install ngrok
 ngrok http 3000
 ```
 
-### 5. Configure ChatGPT
+### 5. Configure ChatGPT MCP Connector
 
 1. Go to [ChatGPT](https://chat.openai.com)
-2. Click on your profile → "My GPTs" → "Create a GPT"
-3. Go to "Configure" tab
-4. Under "Actions", click "Create new action"
-5. Choose "Import from URL"
-6. Enter: `https://your-tunnel-url.trycloudflare.com/chatgpt-openapi-schema.json`
-7. Set Authentication to "None"
-8. Save the GPT
+2. Click on your profile → "Apps & Connectors"
+3. Click "Create" button in the top right
+4. Select "New Connector BETA"
+5. Fill in the connector details:
+   - **Name**: Jamf MCP (or your preferred name)
+   - **Description**: Connect to Jamf Pro device management
+   - **MCP Server URL**: `https://your-tunnel-url.trycloudflare.com`
+   - **Authentication**: Select "None" for POC testing
+6. Click "Create" to save the connector
+7. The connector will appear in your "Enabled apps & connectors" list with a "DEV" label
 
 ### 6. Test the Connection
 
-In your custom GPT, try these commands:
+Once the connector is created, start a new ChatGPT conversation and try these commands:
 - "Search for devices named 'MacBook'"
 - "Check device compliance for the last 30 days"
 - "Find devices that haven't checked in recently"
@@ -124,10 +127,10 @@ In your custom GPT, try these commands:
 ## Architecture
 
 ```
-ChatGPT <-> Internet <-> Tunnel <-> MCP Server <-> Jamf Pro API
+ChatGPT MCP Connector <-> Internet <-> Tunnel <-> MCP Server <-> Jamf Pro API
 ```
 
-The server implements the MCP protocol with JSON-RPC, allowing ChatGPT to interact with your Jamf instance through natural language.
+The server implements the MCP protocol with JSON-RPC, allowing ChatGPT to interact with your Jamf instance through natural language using the new MCP Connector feature (currently in beta).
 
 ## Security Considerations
 
@@ -141,9 +144,15 @@ For production use:
 5. Use read-only Jamf API credentials
 6. Deploy to a secure cloud environment
 
+## Important Notes
+
+⚠️ **MCP Connectors are in BETA**: ChatGPT's MCP Connector feature is currently in beta. Features may change.
+
+⚠️ **Security Warning**: The MCP server URL warning "Custom MCP servers introduce risk" is expected. For production use, ensure proper authentication and security measures are in place.
+
 ## Troubleshooting
 
-### ChatGPT Can't Connect
+### ChatGPT Connector Can't Connect
 1. Check server is running: `curl http://localhost:3000/health`
 2. Check tunnel is active and URL is accessible
 3. Verify CORS settings include ChatGPT domains
