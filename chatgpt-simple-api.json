@@ -1,0 +1,110 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Jamf Device Manager API",
+    "version": "1.0.0",
+    "description": "Simple API endpoints for ChatGPT to manage Jamf devices"
+  },
+  "servers": [
+    {
+      "url": "https://your-tunnel-url.trycloudflare.com",
+      "description": "Replace with your actual tunnel URL"
+    }
+  ],
+  "paths": {
+    "/chatgpt/health": {
+      "get": {
+        "summary": "Health check",
+        "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {"type": "string"},
+                    "service": {"type": "string"},
+                    "message": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chatgpt/devices/search": {
+      "get": {
+        "summary": "Search for devices",
+        "operationId": "searchDevices",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "description": "Search term (name, serial, user, etc)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "devices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "count": {"type": "integer"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chatgpt/devices/compliance": {
+      "get": {
+        "summary": "Check device compliance",
+        "operationId": "checkCompliance",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "description": "Days since last check-in",
+            "schema": {
+              "type": "integer",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compliance report"
+          }
+        }
+      }
+    },
+    "/chatgpt/policies": {
+      "get": {
+        "summary": "List policies",
+        "operationId": "listPolicies",
+        "responses": {
+          "200": {
+            "description": "List of policies"
+          }
+        }
+      }
+    }
+  }
+}

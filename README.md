@@ -25,6 +25,16 @@ npm run build
 
 Configure your credentials in Claude Desktop (see Configuration section below).
 
+## 🤖 ChatGPT Integration (NEW!)
+
+This server now supports ChatGPT integration! You can connect ChatGPT to your Jamf Pro instance using the MCP protocol. See [CHATGPT_CONNECTOR_README.md](CHATGPT_CONNECTOR_README.md) for detailed setup instructions.
+
+**Quick Overview:**
+- Run the server in development mode
+- Create a tunnel using Cloudflare or ngrok
+- Import the OpenAPI schema into ChatGPT
+- Query your Jamf devices using natural language
+
 ## Features
 
 ### Tools (Executable Functions)

@@ -318,7 +318,7 @@ export const handleTokenRefresh = async (req: Request, res: Response): Promise<v
       body: tokenParams.toString(),
     });
     
-    const tokens = await tokenResponse.json();
+    const tokens = await tokenResponse.json() as any;
     
     if (!tokenResponse.ok) {
       throw new Error(tokens.error_description || tokens.error || 'Token refresh failed');

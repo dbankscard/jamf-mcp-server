@@ -85,18 +85,311 @@ app.use('/auth', limiter);
 // Request logging middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
+  
+  // Log incoming request details for debugging
+  logger.info(`Incoming request: ${req.method} ${req.url}`, {
+    headers: req.headers,
+    query: req.query,
+    body: req.body,
+    ip: req.ip
+  });
+  
   res.on('finish', () => {
     const duration = Date.now() - start;
-    logger.info({
-      method: req.method,
-      url: req.url,
-      status: res.statusCode,
-      duration,
-      ip: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    logger.info(`Request completed: ${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`);
   });
   next();
+});
+
+// ChatGPT endpoints (no auth required for POC)
+if (process.env.NODE_ENV === 'development') {
+  app.get('/chatgpt/health', (_req: Request, res: Response) => {
+    res.json({
+      status: 'healthy',
+      service: 'jamf-mcp-chatgpt',
+      message: 'ChatGPT endpoint ready',
+      timestamp: new Date().toISOString()
+    });
+  });
+  
+  // Simple REST endpoints for ChatGPT
+  const jamfClient = new JamfApiClientHybrid({
+    baseUrl: process.env.JAMF_URL!,
+    clientId: process.env.JAMF_CLIENT_ID,
+    clientSecret: process.env.JAMF_CLIENT_SECRET,
+    username: process.env.JAMF_USERNAME,
+    password: process.env.JAMF_PASSWORD,
+    readOnlyMode: process.env.JAMF_READ_ONLY === 'true',
+  });
+  
+  app.get('/chatgpt/devices/search', async (req: Request, res: Response) => {
+    try {
+      const query = req.query.query as string || '';
+      logger.info('ChatGPT device search', { query });
+      
+      const devices = await jamfClient.searchComputers(query);
+      res.json({
+        devices: devices.slice(0, 10), // Limit to 10 for ChatGPT
+        count: devices.length,
+        query
+      });
+    } catch (error) {
+      logger.error('Device search error:', error);
+      res.status(500).json({ error: 'Search failed' });
+    }
+  });
+  
+  app.get('/chatgpt/devices/compliance', async (req: Request, res: Response) => {
+    try {
+      const days = parseInt(req.query.days as string) || 30;
+      logger.info('ChatGPT compliance check', { days });
+      
+      const devices = await jamfClient.getAllComputers();
+      const now = Date.now();
+      const threshold = days * 24 * 60 * 60 * 1000;
+      
+      const noncompliant = devices.filter(device => {
+        if (!device.last_contact_time) return true;
+        const lastContact = new Date(device.last_contact_time).getTime();
+        return (now - lastContact) > threshold;
+      });
+      
+      res.json({
+        total: devices.length,
+        compliant: devices.length - noncompliant.length,
+        noncompliant: noncompliant.length,
+        devices: noncompliant.slice(0, 5).map(d => ({
+          id: d.id,
+          name: d.name,
+          serialNumber: d.serial_number,
+          lastSeen: d.last_contact_time
+        }))
+      });
+    } catch (error) {
+      logger.error('Compliance check error:', error);
+      res.status(500).json({ error: 'Compliance check failed' });
+    }
+  });
+  
+  app.get('/chatgpt/policies', async (_req: Request, res: Response) => {
+    try {
+      logger.info('ChatGPT list policies');
+      // For now, return a simple message
+      res.json({
+        message: 'Policy listing endpoint',
+        note: 'Connect this to your Jamf policies API'
+      });
+    } catch (error) {
+      logger.error('List policies error:', error);
+      res.status(500).json({ error: 'Failed to list policies' });
+    }
+  });
+  
+  logger.info('ChatGPT development endpoints enabled at /chatgpt/*');
+}
+
+// Root endpoint for ChatGPT MCP discovery and JSON-RPC
+app.get('/', (_req: Request, res: Response) => {
+  res.json({
+    name: 'Jamf MCP Server',
+    version: '1.0.0',
+    protocol: 'mcp',
+    endpoints: {
+      mcp: '/mcp',
+      health: '/health',
+      oauth: {
+        authorize: '/auth/authorize',
+        token: '/auth/token'
+      }
+    }
+  });
+});
+
+// Handle JSON-RPC requests at root for ChatGPT
+app.post('/', async (req: Request, res: Response) => {
+  try {
+    const { method, params, id } = req.body;
+    logger.info(`JSON-RPC request: ${method}`, { params, id });
+    
+    if (method === 'initialize') {
+      // Respond to initialize request
+      res.json({
+        jsonrpc: '2.0',
+        id,
+        result: {
+          protocolVersion: '2025-03-26',
+          capabilities: {
+            tools: {
+              listTools: true
+            },
+            resources: {
+              list: true,
+              read: true
+            },
+            prompts: {
+              list: true
+            }
+          },
+          serverInfo: {
+            name: 'Jamf MCP Server',
+            version: '1.0.0'
+          }
+        }
+      });
+    } else if (method === 'tools/list') {
+      // List available tools
+      res.json({
+        jsonrpc: '2.0',
+        id,
+        result: {
+          tools: [
+            {
+              name: 'search_computers',
+              description: 'Search for computers in Jamf Pro',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  query: {
+                    type: 'string',
+                    description: 'Search query'
+                  }
+                }
+              }
+            },
+            {
+              name: 'check_compliance',
+              description: 'Check device compliance status',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  days: {
+                    type: 'number',
+                    description: 'Days since last check-in'
+                  }
+                }
+              }
+            }
+          ]
+        }
+      });
+    } else if (method === 'notifications/initialized') {
+      // Handle initialized notification (no response needed for notifications)
+      logger.info('Client initialized successfully');
+      res.status(204).end();
+    } else if (method === 'tools/call') {
+      // Handle tool invocation
+      const { name, arguments: args } = params;
+      logger.info(`Tool call: ${name}`, { args });
+      
+      try {
+        const jamfClient = new JamfApiClientHybrid({
+          baseUrl: process.env.JAMF_URL!,
+          clientId: process.env.JAMF_CLIENT_ID,
+          clientSecret: process.env.JAMF_CLIENT_SECRET,
+          username: process.env.JAMF_USERNAME,
+          password: process.env.JAMF_PASSWORD,
+          readOnlyMode: process.env.JAMF_READ_ONLY === 'true',
+        });
+        
+        let result;
+        if (name === 'search_computers') {
+          const devices = await jamfClient.searchComputers(args.query || '');
+          result = {
+            devices: devices.slice(0, 10),
+            count: devices.length,
+            query: args.query
+          };
+        } else if (name === 'check_compliance') {
+          const devices = await jamfClient.getAllComputers();
+          const days = args.days || 30;
+          const now = Date.now();
+          const threshold = days * 24 * 60 * 60 * 1000;
+          
+          const noncompliant = devices.filter(device => {
+            if (!device.last_contact_time) return true;
+            const lastContact = new Date(device.last_contact_time).getTime();
+            return (now - lastContact) > threshold;
+          });
+          
+          result = {
+            total: devices.length,
+            compliant: devices.length - noncompliant.length,
+            noncompliant: noncompliant.length,
+            devices: noncompliant.slice(0, 5).map(d => ({
+              id: d.id,
+              name: d.name,
+              serialNumber: d.serial_number,
+              lastSeen: d.last_contact_time
+            }))
+          };
+        } else {
+          throw new Error(`Unknown tool: ${name}`);
+        }
+        
+        res.json({
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(result, null, 2)
+              }
+            ]
+          }
+        });
+      } catch (error: any) {
+        logger.error('Tool execution error:', error);
+        res.json({
+          jsonrpc: '2.0',
+          id,
+          error: {
+            code: -32603,
+            message: error.message || 'Tool execution failed'
+          }
+        });
+      }
+    } else {
+      res.status(400).json({
+        jsonrpc: '2.0',
+        id,
+        error: {
+          code: -32601,
+          message: 'Method not found'
+        }
+      });
+    }
+  } catch (error) {
+    logger.error('JSON-RPC error:', error);
+    res.status(500).json({
+      jsonrpc: '2.0',
+      id: req.body.id,
+      error: {
+        code: -32603,
+        message: 'Internal error'
+      }
+    });
+  }
+});
+
+// MCP discovery endpoint
+app.get('/.well-known/mcp', (_req: Request, res: Response) => {
+  res.json({
+    "mcp_version": "1.0",
+    "name": "Jamf MCP Server",
+    "description": "MCP server for Jamf Pro device management",
+    "icon_url": null,
+    "capabilities": {
+      "authentication": {
+        "type": "oauth2",
+        "oauth2": {
+          "authorization_url": "https://glance-rosa-sec-tone.trycloudflare.com/auth/authorize",
+          "token_url": "https://glance-rosa-sec-tone.trycloudflare.com/auth/token",
+          "scopes": ["read", "write"]
+        }
+      }
+    }
+  });
 });
 
 // Health check endpoint
@@ -115,6 +408,19 @@ app.get('/health', (_req: Request, res: Response) => {
 app.get('/auth/authorize', validateOAuthAuthorize, handleOAuthAuthorize);
 app.get('/auth/callback', validateOAuthCallback, handleOAuthCallback);
 app.post('/auth/token', validateTokenRefresh, handleTokenRefresh);
+
+// MCP-specific endpoint that ChatGPT might look for
+app.get('/mcp/v1', (_req: Request, res: Response) => {
+  res.json({
+    version: '1.0.0',
+    protocol: 'mcp',
+    capabilities: {
+      tools: true,
+      resources: true,
+      prompts: true
+    }
+  });
+});
 
 // Validate environment configuration on startup
 const validateConfig = () => {
@@ -223,8 +529,17 @@ app.use('/mcp', authMiddleware, async (req: Request, res: Response) => {
 });
 
 // 404 handler
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({ error: 'Not found' });
+app.use((req: Request, res: Response) => {
+  logger.warn(`404 - Route not found: ${req.method} ${req.url}`, {
+    headers: req.headers,
+    body: req.body,
+    query: req.query
+  });
+  res.status(404).json({ 
+    error: 'Not found',
+    path: req.url,
+    method: req.method
+  });
 });
 
 // Error handling middleware
@@ -248,6 +563,19 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully');
   process.exit(0);
+});
+
+// Catch-all to debug 404s
+app.use('*', (req: Request, res: Response) => {
+  logger.warn(`404 - Not found: ${req.method} ${req.originalUrl}`, {
+    headers: req.headers,
+    query: req.query
+  });
+  res.status(404).json({ 
+    error: 'Not found', 
+    path: req.originalUrl,
+    method: req.method 
+  });
 });
 
 // Start server
