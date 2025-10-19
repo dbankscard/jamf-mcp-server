@@ -1,0 +1,60 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Jamf MCP Server (ChatGPT)",
+    "version": "1.0.0",
+    "description": "Jamf Pro device management for ChatGPT - No authentication required"
+  },
+  "servers": [
+    {
+      "url": "https://glance-rosa-sec-tone.trycloudflare.com"
+    }
+  ],
+  "paths": {
+    "/chatgpt/health": {
+      "get": {
+        "summary": "Health check for ChatGPT",
+        "description": "Check if the ChatGPT endpoint is working",
+        "operationId": "chatgptHealthCheck",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {"type": "string"},
+                    "service": {"type": "string"},
+                    "message": {"type": "string"},
+                    "timestamp": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chatgpt/mcp": {
+      "get": {
+        "summary": "Connect to Jamf MCP Server",
+        "description": "Connect to the MCP server for Jamf device management. This endpoint automatically handles authentication.",
+        "operationId": "connectJamfMCP",
+        "responses": {
+          "200": {
+            "description": "Connected to MCP server",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "Server-Sent Events stream for MCP communication"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -25,7 +25,13 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["mcp", "jamf", "mdm", "apple", "device-management"],
+  "keywords": [
+    "mcp",
+    "jamf",
+    "mdm",
+    "apple",
+    "device-management"
+  ],
   "author": "dbankscard",
   "repository": {
     "type": "git",
@@ -39,30 +45,30 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "axios": "^1.7.0",
-    "zod": "^3.23.0",
-    "express": "^4.18.2",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
-    "jsonwebtoken": "^9.0.2",
-    "jwks-rsa": "^3.1.0",
-    "dotenv": "^16.3.1",
-    "helmet": "^7.1.0",
-    "compression": "^1.7.4",
+    "dotenv": "^16.6.1",
+    "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
-    "winston": "^3.11.0"
+    "helmet": "^7.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.2.0",
+    "winston": "^3.18.3",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.8.0",
-    "tsx": "^4.0.0",
+    "@types/compression": "^1.7.5",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.23",
     "@types/jest": "^29.5.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.2.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^8.0.0",
-    "@types/express": "^4.17.21",
-    "@types/cors": "^2.8.17",
-    "@types/jsonwebtoken": "^9.0.5",
-    "@types/compression": "^1.7.5"
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.8.0"
   }
 }
