@@ -96,4 +96,3 @@ This project is open source and available under the MIT License.
 ---
 
 Built with ❤️ for the Jamf and ChatGPT communities
-EOF < /dev/null
