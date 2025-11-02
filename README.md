@@ -4,6 +4,7 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue)](https://www.typescriptlang.org/)
 [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-1.0.0-purple)](https://github.com/modelcontextprotocol/sdk)
+[![MCP Badge](https://lobehub.com/badge/mcp-full/dbankscard-jamf-mcp-server)](https://lobehub.com/mcp/dbankscard-jamf-mcp-server)
 
 A comprehensive MCP (Model Context Protocol) server that enables AI assistants to interact with Jamf Pro for complete Apple device management. Works with Claude Desktop, Cody, and now **ChatGPT** (via MCP Connectors).
 
