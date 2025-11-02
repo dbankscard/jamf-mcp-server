@@ -31,8 +31,9 @@ const consoleFormat = winston.format.combine(
 export const createLogger = (label: string): winston.Logger => {
   const transports: winston.transport[] = [];
 
-  // Console transport
-  if (nodeEnv !== 'test') {
+  // Console transport - disabled for MCP mode to avoid stdout/stderr pollution
+  const isMCPMode = process.env.MCP_MODE === 'true' || process.argv.includes('--mcp');
+  if (nodeEnv !== 'test' && !isMCPMode) {
     transports.push(
       new winston.transports.Console({
         format: nodeEnv === 'development' ? consoleFormat : structuredFormat,

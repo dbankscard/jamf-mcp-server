@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Build artifacts (will be built in container)
+dist/
+skills/
+*.tsbuildinfo
+
+# Development files
+.env
+.env.local
+.env.*.local
+claude_desktop_config.json
+
+# Test files
+coverage/
+.nyc_output/
+*.test.ts
+*.spec.ts
+test-*.js
+
+# Documentation
+docs/images/
+*.md
+!README.md
+!QUICK_START.md
+
+# IDE and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.github/
+
+# CI/CD
+.travis.yml
+.gitlab-ci.yml
+azure-pipelines.yml
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+*.backup
+*.bak
+
+# Logs (will be created in container)
+logs/
+*.log

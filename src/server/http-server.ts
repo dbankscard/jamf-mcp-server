@@ -12,6 +12,8 @@ import dotenv from 'dotenv';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
+import { registerShutdownHandler } from '../utils/shutdown-manager.js';
+import { basicHealthCheck, detailedHealthCheck, livenessProbe, readinessProbe } from './health-check.js';
 import { createLogger } from './logger.js';
 import { 
   validateSecurityHeaders, 
@@ -21,6 +23,10 @@ import {
   requestIdMiddleware 
 } from './validation-middleware.js';
 import path from 'path';
+import { SkillsManager } from '../skills/manager.js';
+import { createSkillsRouter, chatGPTOptimizationMiddleware } from './skills-endpoints.js';
+import { integrateSkillsWithTools, getSkillTools } from '../tools/skills-integration.js';
+import { initializeSkillsForHttp } from '../skills/http-initializer.js';
 
 // Load environment variables
 dotenv.config();
@@ -28,6 +34,19 @@ dotenv.config();
 const logger = createLogger('http-server');
 const app = express();
 const port = parseInt(process.env.PORT || '3000', 10);
+
+// Initialize Skills Manager
+const skillsManager = new SkillsManager();
+
+// Initialize Jamf client for skills
+const jamfClientForSkills = new JamfApiClientHybrid({
+  baseUrl: process.env.JAMF_URL!,
+  clientId: process.env.JAMF_CLIENT_ID,
+  clientSecret: process.env.JAMF_CLIENT_SECRET,
+  username: process.env.JAMF_USERNAME,
+  password: process.env.JAMF_PASSWORD,
+  readOnlyMode: process.env.JAMF_READ_ONLY === 'true',
+});
 
 // Security middleware
 app.use(helmet({
@@ -83,6 +102,9 @@ const limiter = rateLimit({
 app.use('/mcp', limiter);
 app.use('/auth', limiter);
 
+// ChatGPT optimization middleware
+app.use(chatGPTOptimizationMiddleware);
+
 // Request logging middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
@@ -102,9 +124,20 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// Initialize skills manager for HTTP context
+initializeSkillsForHttp(skillsManager, jamfClientForSkills);
+
+// Mount skills router
+app.use('/api/v1/skills', createSkillsRouter(skillsManager));
+
 // Serve OpenAPI schema for ChatGPT
 app.get('/chatgpt-openapi-schema.json', (_req: Request, res: Response) => {
   res.sendFile('chatgpt-openapi-schema.json', { root: path.join(process.cwd(), 'public') });
+});
+
+// Serve Skills OpenAPI schema for ChatGPT
+app.get('/chatgpt-skills-openapi.json', (_req: Request, res: Response) => {
+  res.sendFile('chatgpt-skills-openapi.json', { root: path.join(process.cwd(), 'public') });
 });
 
 // ChatGPT endpoints (no auth required for POC)
@@ -126,6 +159,8 @@ if (process.env.NODE_ENV === 'development') {
     username: process.env.JAMF_USERNAME,
     password: process.env.JAMF_PASSWORD,
     readOnlyMode: process.env.JAMF_READ_ONLY === 'true',
+    // TLS/SSL configuration - only disable for development with self-signed certs
+    rejectUnauthorized: process.env.JAMF_ALLOW_INSECURE !== 'true',
   });
   
   app.get('/chatgpt/devices/search', async (req: Request, res: Response) => {
@@ -243,39 +278,45 @@ app.post('/', async (req: Request, res: Response) => {
         }
       });
     } else if (method === 'tools/list') {
-      // List available tools
+      // List available tools including skills
+      const basicTools = [
+        {
+          name: 'search_computers',
+          description: 'Search for computers in Jamf Pro',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'Search query'
+              }
+            }
+          }
+        },
+        {
+          name: 'check_compliance',
+          description: 'Check device compliance status',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              days: {
+                type: 'number',
+                description: 'Days since last check-in'
+              }
+            }
+          }
+        }
+      ];
+      
+      // Add skill tools
+      const skillTools = getSkillTools(skillsManager);
+      const allTools = [...basicTools, ...skillTools];
+      
       res.json({
         jsonrpc: '2.0',
         id,
         result: {
-          tools: [
-            {
-              name: 'search_computers',
-              description: 'Search for computers in Jamf Pro',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  query: {
-                    type: 'string',
-                    description: 'Search query'
-                  }
-                }
-              }
-            },
-            {
-              name: 'check_compliance',
-              description: 'Check device compliance status',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  days: {
-                    type: 'number',
-                    description: 'Days since last check-in'
-                  }
-                }
-              }
-            }
-          ]
+          tools: allTools
         }
       });
     } else if (method === 'notifications/initialized') {
@@ -398,16 +439,14 @@ app.get('/.well-known/mcp', (_req: Request, res: Response) => {
   });
 });
 
-// Health check endpoint
-app.get('/health', (_req: Request, res: Response) => {
-  const health = {
-    status: 'healthy',
-    service: 'jamf-mcp-server',
-    version: '1.2.0',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-  };
-  res.json(health);
+// Health check endpoints
+app.get('/health', basicHealthCheck);
+app.get('/health/detailed', (req: Request, res: Response) => {
+  detailedHealthCheck(req, res, jamfClientForSkills);
+});
+app.get('/health/live', livenessProbe);
+app.get('/health/ready', (req: Request, res: Response) => {
+  readinessProbe(req, res, jamfClientForSkills);
 });
 
 // OAuth endpoints for ChatGPT with validation
@@ -494,6 +533,9 @@ app.use('/mcp', authMiddleware, async (req: Request, res: Response) => {
     registerTools(server, jamfClient as any);
     registerResources(server, jamfClient as any);
     registerPrompts(server);
+    
+    // Integrate skills with existing tools for Claude
+    integrateSkillsWithTools(server, skillsManager, jamfClient);
 
     // Create SSE transport for HTTP
     transport = new SSEServerTransport('/mcp', res);
@@ -560,16 +602,8 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   }
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down gracefully');
-  process.exit(0);
-});
+// Server instance will be available after listen()
+let httpServer: any = null;
 
 // Catch-all to debug 404s
 app.use('*', (req: Request, res: Response) => {
@@ -588,11 +622,30 @@ app.use('*', (req: Request, res: Response) => {
 try {
   validateConfig();
   
-  app.listen(port, () => {
+  httpServer = app.listen(port, () => {
     logger.info(`Jamf MCP HTTP server running on port ${port}`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`Health check: http://localhost:${port}/health`);
     logger.info(`MCP endpoint: http://localhost:${port}/mcp`);
+    
+    // Register shutdown handler after server starts
+    registerShutdownHandler(
+      'http-server',
+      () => new Promise<void>((resolve, reject) => {
+        logger.info('Closing HTTP server...');
+        httpServer.close((err?: Error) => {
+          if (err) {
+            logger.error('Error closing HTTP server', { error: err.message });
+            reject(err);
+          } else {
+            logger.info('HTTP server closed');
+            resolve();
+          }
+        });
+      }),
+      30, // Priority 30 - close server early
+      10000 // 10 second timeout
+    );
   });
 } catch (error) {
   logger.error('Failed to start server:', error);
