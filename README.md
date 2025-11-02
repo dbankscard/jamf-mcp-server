@@ -6,6 +6,14 @@ Connect ChatGPT to your Jamf Pro instance using the Model Context Protocol (MCP)
   <img src="docs/images/chatgpt-apps-connectors-page.png" alt="ChatGPT MCP Connector" width="600">
 </p>
 
+## 🔐 Security Notice
+
+**IMPORTANT**: Before using this server:
+1. Copy `.env.example` to `.env` and fill in your credentials
+2. Never commit `.env` or any files containing credentials
+3. Review and update any shell scripts with your own credentials
+4. If credentials were accidentally exposed, rotate them immediately
+
 ## 🚀 Quick Start
 
 Get up and running in 5 minutes with our [Quick Start Guide](QUICK_START.md).
