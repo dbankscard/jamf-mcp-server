@@ -6,7 +6,7 @@
  * - Classic API: Uses Basic authentication headers
  */
 
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import https from 'https';
 
 interface JamfConfig {
@@ -392,7 +392,7 @@ export class JamfApiClientHybrid {
       try {
         await this.axiosInstance.post('/api/v1/auth/keep-alive');
         console.error('✅ Token refreshed');
-      } catch (error) {
+      } catch (_error) {
         // Re-authenticate if keep-alive fails
         await this.getBearerTokenWithBasicAuth();
       }
