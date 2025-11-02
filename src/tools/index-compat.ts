@@ -6,7 +6,13 @@ import {
   TextContent,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { parseJamfDate } from '../jamf-client-classic.js';
+// import { parseJamfDate } from '../jamf-client-classic.js';
+// Helper function to parse Jamf dates
+const parseJamfDate = (date: string | Date | undefined): Date => {
+  if (!date) return new Date(0);
+  if (date instanceof Date) return date;
+  return new Date(date);
+};
 
 const SearchDevicesSchema = z.object({
   query: z.string().describe('Search query to find devices by name, serial number, IP address, username, etc.'),
