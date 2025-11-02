@@ -6,16 +6,22 @@
   "main": "dist/index-main.js",
   "bin": {
     "jamf-mcp-server": "dist/index-main.js",
-    "jamf-agent": "dist/agent/interface/CLIInterface.js"
+    "jamf-mcp-http": "dist/index-http.js"
   },
   "scripts": {
-    "build": "tsc && chmod +x dist/index-main.js dist/index.js dist/index-enhanced.js dist/agent/interface/CLIInterface.js",
+    "test:skills": "npm run build:quick && node test-all-skills.mjs",
+    "build:quick": "tsc",
+    "build": "npm run test:skills && tsc && chmod +x dist/index-main.js dist/index.js dist/index-enhanced.js dist/index-http.js",
+    "build:force": "tsc && chmod +x dist/index-main.js dist/index.js dist/index-enhanced.js dist/index-http.js",
     "dev": "tsx src/index-main.ts",
     "dev:enhanced": "JAMF_USE_ENHANCED_MODE=true tsx src/index-main.ts",
     "serve": "node dist/index-main.js",
     "serve:enhanced": "JAMF_USE_ENHANCED_MODE=true node dist/index-main.js",
+    "serve:http": "tsx src/server/http-server.ts",
+    "serve:http:prod": "node dist/server/http-server.js",
     "inspector": "npx @modelcontextprotocol/inspector dist/index-main.js",
-    "test": "NODE_OPTIONS='--experimental-vm-modules --no-warnings' jest",
+    "test": "npm run test:skills && npm run test:jest",
+    "test:jest": "NODE_OPTIONS='--experimental-vm-modules --no-warnings' jest",
     "test:watch": "NODE_OPTIONS='--experimental-vm-modules' jest --watch",
     "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage",
     "test:enhanced": "node test-scripts/test-enhanced-error-handling.js",
@@ -27,7 +33,13 @@
     "agent:example": "tsx examples/agent-example.ts",
     "agent:demo": "tsx examples/agent-demo.ts"
   },
-  "keywords": ["mcp", "jamf", "mdm", "apple", "device-management"],
+  "keywords": [
+    "mcp",
+    "jamf",
+    "mdm",
+    "apple",
+    "device-management"
+  ],
   "author": "dbankscard",
   "repository": {
     "type": "git",
@@ -41,18 +53,32 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "axios": "^1.7.0",
-    "zod": "^3.23.0",
-    "@aws-sdk/client-bedrock-runtime": "^3.0.0"
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.2.0",
+    "winston": "^3.18.3",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.8.0",
-    "tsx": "^4.0.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.0.0",
+    "@types/compression": "^1.7.5",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.23",
     "@types/jest": "^29.5.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.2.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
-    "eslint": "^8.0.0"
+    "chalk": "^5.6.2",
+    "eslint": "^8.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.8.0"
   }
 }

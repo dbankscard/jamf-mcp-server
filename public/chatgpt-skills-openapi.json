@@ -1,0 +1,353 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Jamf MCP Skills API",
+    "version": "1.0.0",
+    "description": "High-level Jamf management skills for ChatGPT"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/api/v1/skills/execute": {
+      "post": {
+        "summary": "Execute a Jamf management skill",
+        "operationId": "executeSkill",
+        "description": "Executes high-level management tasks like finding outdated devices, batch updates, policy deployment, and compliance checks",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillExecutionRequest"
+              },
+              "examples": {
+                "findOutdatedDevices": {
+                  "summary": "Find devices not seen in 30 days",
+                  "value": {
+                    "skill": "find-outdated-devices",
+                    "parameters": {
+                      "daysSinceLastContact": 30,
+                      "includeDetails": true
+                    }
+                  }
+                },
+                "batchInventoryUpdate": {
+                  "summary": "Update inventory for multiple devices",
+                  "value": {
+                    "skill": "batch-inventory-update",
+                    "parameters": {
+                      "deviceIdentifiers": ["C02XL1234567", "C02XL2345678"],
+                      "identifierType": "serialNumber"
+                    }
+                  }
+                },
+                "deployPolicy": {
+                  "summary": "Deploy policy by criteria",
+                  "value": {
+                    "skill": "deploy-policy-by-criteria",
+                    "parameters": {
+                      "policyIdentifier": "Security Update",
+                      "identifierType": "name",
+                      "criteria": {
+                        "osVersion": "14",
+                        "department": "Engineering"
+                      },
+                      "dryRun": true
+                    }
+                  }
+                },
+                "complianceCheck": {
+                  "summary": "Run compliance audit",
+                  "value": {
+                    "skill": "scheduled-compliance-check",
+                    "parameters": {
+                      "checks": {
+                        "outdatedDevices": {
+                          "enabled": true,
+                          "daysThreshold": 30
+                        },
+                        "osVersionCompliance": {
+                          "enabled": true,
+                          "minimumVersion": "14.0"
+                        }
+                      },
+                      "outputFormat": "detailed"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill executed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillExecutionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/skills/catalog": {
+      "get": {
+        "summary": "Get available skills catalog",
+        "operationId": "getSkillsCatalog",
+        "description": "Returns a list of all available skills with their parameters and examples",
+        "responses": {
+          "200": {
+            "description": "Skills catalog retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillsCatalogResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/skills/{skillName}": {
+      "get": {
+        "summary": "Get skill details",
+        "operationId": "getSkillDetails",
+        "parameters": [
+          {
+            "name": "skillName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "find-outdated-devices",
+                "batch-inventory-update",
+                "deploy-policy-by-criteria",
+                "scheduled-compliance-check"
+              ]
+            },
+            "description": "Name of the skill to get details for"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Skill details retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Skill not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SkillExecutionRequest": {
+        "type": "object",
+        "required": ["skill", "parameters"],
+        "properties": {
+          "skill": {
+            "type": "string",
+            "enum": [
+              "find-outdated-devices",
+              "batch-inventory-update",
+              "deploy-policy-by-criteria",
+              "scheduled-compliance-check"
+            ],
+            "description": "The skill to execute"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Skill-specific parameters"
+          }
+        }
+      },
+      "SkillExecutionResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Whether the skill executed successfully"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message about the result"
+          },
+          "data": {
+            "type": "object",
+            "description": "Structured data returned by the skill"
+          },
+          "nextActions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Suggested follow-up actions"
+          }
+        }
+      },
+      "SkillsCatalogResponse": {
+        "type": "object",
+        "properties": {
+          "skills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkillSummary"
+            }
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "endpoint": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "example": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "SkillSummary": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["device-management", "policy-management", "automation", "reporting"]
+          },
+          "description": {
+            "type": "string"
+          },
+          "parameters": {
+            "type": "object"
+          },
+          "examples": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "params": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SkillDetails": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ParameterDefinition"
+            }
+          },
+          "examples": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ParameterDefinition": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["string", "number", "boolean", "array", "object"]
+          },
+          "description": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "default": {},
+          "enum": {
+            "type": "array"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "default": false
+          },
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

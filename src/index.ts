@@ -1,23 +1,19 @@
 #!/usr/bin/env node
-
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListResourcesRequestSchema,
-  ListToolsRequestSchema,
-  ListPromptsRequestSchema,
-  GetPromptRequestSchema,
-  ReadResourceRequestSchema,
-  ErrorCode,
-  McpError,
-} from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
-
 import { JamfApiClientHybrid } from './jamf-client-hybrid.js';
 import { registerTools } from './tools/index-compat.js';
 import { registerResources } from './resources/index-compat.js';
 import { registerPrompts } from './prompts/index.js';
+import { SkillsManager } from './skills/manager.js';
+import { registerSkillsAsMCPTools } from './tools/skills-mcp-integration.js';
+import { setupGlobalErrorHandlers } from './utils/error-handler.js';
+import { createLogger } from './server/logger.js';
+import { registerShutdownHandler, registerCommonHandlers } from './utils/shutdown-manager.js';
+import { cleanupAuthMiddleware } from './server/auth-middleware.js';
+import { cleanupAgentPool } from './utils/http-agent-pool.js';
+
+const logger = createLogger('main');
 
 // Environment variables
 const JAMF_URL = process.env.JAMF_URL;
@@ -47,7 +43,7 @@ if (!hasOAuth2 && !hasBasicAuth) {
 const server = new Server(
   {
     name: 'jamf-mcp-server',
-    version: '1.0.0',
+    version: '1.2.0',
   },
   {
     capabilities: {
@@ -58,19 +54,23 @@ const server = new Server(
   }
 );
 
+// Initialize Skills Manager
+const skillsManager = new SkillsManager();
+
 async function run() {
   try {
-    console.error('Starting Jamf MCP server...');
-    console.error(`Jamf URL: ${JAMF_URL}`);
-    console.error(`Authentication methods available:`);
+    logger.info('Starting Jamf MCP server with Skills...');
+    logger.info(`Jamf URL: ${JAMF_URL}`);
+    logger.info('Authentication methods available:');
     if (hasOAuth2) {
-      console.error(`  ✅ OAuth2 (Modern API) - Client ID: ${JAMF_CLIENT_ID}`);
+      logger.info(`  ✅ OAuth2 (Modern API) - Client ID: ${JAMF_CLIENT_ID}`);
     }
     if (hasBasicAuth) {
-      console.error(`  ✅ Basic Auth (Classic API) - Username: ${JAMF_USERNAME}`);
+      logger.info(`  ✅ Basic Auth (Classic API) - Username: ${JAMF_USERNAME}`);
     }
-    console.error(`Read-only mode: ${READ_ONLY_MODE}`);
-    
+    logger.info(`Read-only mode: ${READ_ONLY_MODE}`);
+    logger.info('Skills integration: ✅ Enabled');
+
     // Initialize the hybrid client
     const jamfClient = new JamfApiClientHybrid({
       baseUrl: JAMF_URL!,
@@ -79,25 +79,45 @@ async function run() {
       username: JAMF_USERNAME,
       password: JAMF_PASSWORD,
       readOnlyMode: READ_ONLY_MODE,
+      // TLS/SSL configuration - only disable for development with self-signed certs
+      rejectUnauthorized: process.env.JAMF_ALLOW_INSECURE !== 'true',
     });
-    
+
     // Register handlers
-    registerTools(server, jamfClient as any);
-    registerResources(server, jamfClient as any);
+    registerTools(server, jamfClient);
+    registerResources(server, jamfClient);
     registerPrompts(server);
     
+    // Register skills as MCP tools
+    registerSkillsAsMCPTools(server, skillsManager, jamfClient);
+
     // Start the server
     const transport = new StdioServerTransport();
     await server.connect(transport);
     
-    console.error('Jamf MCP server started successfully');
+    logger.info('Jamf MCP server started successfully with skills');
   } catch (error) {
-    console.error('Failed to initialize Jamf MCP server:', error);
+    logger.error('Failed to initialize Jamf MCP server', { error });
     process.exit(1);
   }
 }
 
+// Setup global error handlers
+setupGlobalErrorHandlers();
+
+// Register common shutdown handlers
+registerCommonHandlers();
+
+// Register cleanup handlers
+registerShutdownHandler('auth-cleanup', cleanupAuthMiddleware, 20);
+registerShutdownHandler('agent-pool-cleanup', cleanupAgentPool, 20);
+registerShutdownHandler('server-transport-close', async () => {
+  logger.info('Closing server transport...');
+  // Transport will be closed automatically
+}, 40);
+
+// Run the server
 run().catch((error) => {
-  console.error('Fatal error:', error);
+  logger.error('Fatal error', { error });
   process.exit(1);
 });
