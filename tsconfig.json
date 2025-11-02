@@ -22,6 +22,7 @@
     "dist",
     "src/__tests__/**/*",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "src/agent/**/*"
   ]
 }

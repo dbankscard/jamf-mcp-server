@@ -30,7 +30,7 @@ jobs:
       run: npm run build:quick
     
     - name: Run skill tests
-      run: node test-all-skills.js
+      run: node test-all-skills.mjs
       
     - name: Run TypeScript checks
       run: npm run typecheck
