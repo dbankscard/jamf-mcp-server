@@ -1,0 +1,24 @@
+# Development override for docker-compose
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+version: '3.8'
+
+services:
+  jamf-mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder  # Stop at builder stage for development
+    volumes:
+      # Mount source code for hot reloading
+      - ./src:/app/src:ro
+      - ./dist:/app/dist
+      - ./public:/app/public:ro
+      - ./logs:/app/logs
+      - ./package.json:/app/package.json:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+    environment:
+      NODE_ENV: development
+      JAMF_DEBUG_MODE: "true"
+    command: npm run dev  # Use development script with watch mode
+    user: root  # Allow file system access in development

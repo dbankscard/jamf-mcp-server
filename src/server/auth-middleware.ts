@@ -2,11 +2,27 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import jwksRsa from 'jwks-rsa';
 import { createLogger } from './logger.js';
+import { LRUCache } from '../utils/lru-cache.js';
 
 const logger = createLogger('auth-middleware');
 
-// Cache for JWKS clients to avoid recreating them
-const jwksClients = new Map<string, jwksRsa.JwksClient>();
+// LRU cache for JWKS clients with automatic eviction
+const JWKS_CACHE_SIZE = 100; // Maximum number of clients to cache
+const JWKS_CACHE_TTL = 3600000; // 1 hour TTL
+
+const jwksClientsCache = new LRUCache<jwksRsa.JwksClient>({
+  maxSize: JWKS_CACHE_SIZE,
+  maxAge: JWKS_CACHE_TTL,
+  onEvict: (key, client) => {
+    logger.debug(`Evicting JWKS client for domain: ${key}`);
+  }
+});
+
+// Periodic cleanup of expired entries
+const cleanupInterval = setInterval(() => {
+  jwksClientsCache.cleanExpired();
+  logger.debug('JWKS cache cleanup completed', jwksClientsCache.getStats());
+}, 300000); // Clean every 5 minutes
 
 interface TokenPayload {
   sub: string;
@@ -19,24 +35,33 @@ interface TokenPayload {
   [key: string]: any;
 }
 
-// Get or create JWKS client with caching
+// Get or create JWKS client with LRU caching
 const getJwksClient = (domain: string): jwksRsa.JwksClient => {
   const cacheKey = domain;
   
-  if (!jwksClients.has(cacheKey)) {
-    const client = jwksRsa({
-      jwksUri: `https://${domain}/.well-known/jwks.json`,
-      cache: true,
-      cacheMaxEntries: 5,
-      cacheMaxAge: 600000, // 10 minutes
-      rateLimit: true,
-      jwksRequestsPerMinute: 10,
-      timeout: 30000, // 30 seconds
-    });
-    jwksClients.set(cacheKey, client);
+  // Check if client exists in cache
+  const cachedClient = jwksClientsCache.get(cacheKey);
+  if (cachedClient) {
+    logger.debug(`Using cached JWKS client for domain: ${domain}`);
+    return cachedClient;
   }
   
-  return jwksClients.get(cacheKey)!;
+  // Create new client if not in cache
+  logger.info(`Creating new JWKS client for domain: ${domain}`);
+  const client = jwksRsa({
+    jwksUri: `https://${domain}/.well-known/jwks.json`,
+    cache: true,
+    cacheMaxEntries: 5,
+    cacheMaxAge: 600000, // 10 minutes
+    rateLimit: true,
+    jwksRequestsPerMinute: 10,
+    timeout: 30000, // 30 seconds
+  });
+  
+  // Store in LRU cache
+  jwksClientsCache.set(cacheKey, client);
+  
+  return client;
 };
 
 // Validate Auth0 token
@@ -284,4 +309,11 @@ export const authMiddleware = async (
       error: errorMessage,
     });
   }
+};
+
+// Export cleanup function for graceful shutdown
+export const cleanupAuthMiddleware = (): void => {
+  logger.info('Cleaning up auth middleware resources');
+  clearInterval(cleanupInterval);
+  jwksClientsCache.clear();
 };

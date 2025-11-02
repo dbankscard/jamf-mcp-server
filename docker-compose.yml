@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  jamf-mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jamf-mcp-server:latest
+    container_name: jamf-mcp-server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # Server configuration
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      
+      # Jamf configuration
+      JAMF_URL: ${JAMF_URL}
+      JAMF_CLIENT_ID: ${JAMF_CLIENT_ID}
+      JAMF_CLIENT_SECRET: ${JAMF_CLIENT_SECRET}
+      JAMF_USERNAME: ${JAMF_USERNAME}
+      JAMF_PASSWORD: ${JAMF_PASSWORD}
+      JAMF_READ_ONLY: ${JAMF_READ_ONLY:-false}
+      JAMF_ALLOW_INSECURE: ${JAMF_ALLOW_INSECURE:-false}
+      
+      # Enhanced features
+      JAMF_USE_ENHANCED_MODE: ${JAMF_USE_ENHANCED_MODE:-true}
+      JAMF_MAX_RETRIES: ${JAMF_MAX_RETRIES:-3}
+      JAMF_RETRY_DELAY: ${JAMF_RETRY_DELAY:-1000}
+      JAMF_ENABLE_RATE_LIMITING: ${JAMF_ENABLE_RATE_LIMITING:-false}
+      JAMF_ENABLE_CIRCUIT_BREAKER: ${JAMF_ENABLE_CIRCUIT_BREAKER:-false}
+      
+      # OAuth configuration
+      OAUTH_PROVIDER: ${OAUTH_PROVIDER:-production}
+      JWT_SECRET: ${JWT_SECRET}
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+      AUTH0_CLIENT_ID: ${AUTH0_CLIENT_ID}
+      AUTH0_CLIENT_SECRET: ${AUTH0_CLIENT_SECRET}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+      
+      # HTTP connection pool
+      HTTP_MAX_SOCKETS: ${HTTP_MAX_SOCKETS:-50}
+      HTTP_KEEPALIVE_TIMEOUT: ${HTTP_KEEPALIVE_TIMEOUT:-30000}
+      
+      # CORS
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://chat.openai.com,https://chatgpt.com}
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - jamf-mcp-network
+
+  # Optional: Nginx reverse proxy for HTTPS
+  nginx:
+    image: nginx:alpine
+    container_name: jamf-mcp-nginx
+    profiles: ["with-nginx"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - jamf-mcp-server
+    networks:
+      - jamf-mcp-network
+
+  # Optional: Redis for caching (future enhancement)
+  redis:
+    image: redis:alpine
+    container_name: jamf-mcp-redis
+    profiles: ["with-redis"]
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis-data:/data
+    networks:
+      - jamf-mcp-network
+
+networks:
+  jamf-mcp-network:
+    driver: bridge
+
+volumes:
+  redis-data:
