@@ -21,17 +21,17 @@ if (USE_ENHANCED_MODE) {
   }
 
   // Load and run enhanced version
-  import('./index-enhanced.js').then(module => {
+  import('./index-enhanced.js').then(_module => {
     // Module will auto-execute
-  }).catch(error => {
+  }).catch(_error => {
     // MCP servers must not output to stdout/stderr
     process.exit(1);
   });
 } else {
   // Load and run regular version
-  import('./index.js').then(module => {
+  import('./index.js').then(_module => {
     // Module will auto-execute
-  }).catch(error => {
+  }).catch(_error => {
     // MCP servers must not output to stdout/stderr
     process.exit(1);
   });

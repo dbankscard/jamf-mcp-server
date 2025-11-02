@@ -1,8 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
-import https from 'https';
 import { z } from 'zod';
 import { createLogger } from './server/logger.js';
-import { safeExecute, withTimeout } from './utils/error-handler.js';
 import { getDefaultAgentPool } from './utils/http-agent-pool.js';
 import { JamfComputer, JamfComputerDetails, JamfSearchResponse, JamfApiResponse } from './types/jamf-api.js';
 import { isAxiosError, getErrorMessage, getAxiosErrorStatus, getAxiosErrorData } from './utils/type-guards.js';
