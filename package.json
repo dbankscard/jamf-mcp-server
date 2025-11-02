@@ -27,7 +27,11 @@
     "test:enhanced": "node test-scripts/test-enhanced-error-handling.js",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "agent": "tsx src/agent/interface/CLIInterface.ts",
+    "agent:simple": "tsx src/agent/simple-cli.ts",
+    "agent:example": "tsx examples/agent-example.ts",
+    "agent:demo": "tsx examples/agent-demo.ts"
   },
   "keywords": [
     "mcp",

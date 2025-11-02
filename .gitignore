@@ -41,7 +41,13 @@ lerna-debug.log*
 # Test scripts (development only)
 test-scripts/
 test-*.js
+test-*.sh
 !src/__tests__/**/*.js
+
+# Agent test/debug files
+test-agent-*.md
+debug-*.ts
+test-*-simple.ts
 
 # Local documentation and notes
 MULTIPLE_GIT_ACCOUNTS.md

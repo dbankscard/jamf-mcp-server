@@ -2651,7 +2651,7 @@ export class JamfApiClientHybrid {
           const searchData = checkInMap.get(computer.id) || {};
           
           // Try to get check-in time from various possible fields
-          let checkInTime = searchData.Last_Check_in || 
+          const checkInTime = searchData.Last_Check_in || 
                            searchData['Last Check-in'] || 
                            searchData.last_contact_time ||
                            searchData.Last_Contact_Time ||
