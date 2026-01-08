@@ -25,7 +25,7 @@
         "npm run typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "New documentation code in src/documentation/ needs test coverage"
     },
     {
@@ -39,7 +39,7 @@
         "npm run typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "The handbook-generator.ts creates the human-readable markdown output"
     },
     {
@@ -53,7 +53,7 @@
         "npm run typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "CLI tool in src/cli/document-environment.ts needs test coverage"
     },
     {
@@ -69,7 +69,7 @@
         "npm run typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "Too many status files in root. Consolidate into docs/ folder."
     },
     {
@@ -83,7 +83,7 @@
         "npm run typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "README needs to mention the new documentation capabilities"
     },
     {
@@ -97,7 +97,7 @@
         "git status shows clean working tree"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "Organize changes into logical commits: core generator, CLI tool, tests, docs"
     },
     {

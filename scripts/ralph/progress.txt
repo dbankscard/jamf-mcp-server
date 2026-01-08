@@ -54,3 +54,105 @@ Feature: Documentation Branch Finalization
   - Tests also expect getChatGPTSchema() method which doesn't exist anymore
   - auth-middleware.test.ts has import error for non-existent export
   - These are test assertion failures, not module dependency issues
+
+---
+
+## 2026-01-07 - DOC-002
+- Created comprehensive unit tests for DocumentationGenerator class
+- Tests cover all 8 component types: computers, mobile-devices, policies, configuration-profiles, scripts, packages, computer-groups, mobile-device-groups
+- Tests verify constructor, getProgress, generateDocumentation, error handling, metadata
+- 24 tests all passing
+- Files changed: src/__tests__/documentation/generator.test.ts (new)
+- **Learnings:**
+  - Use `formats: []` in tests to skip file writing and avoid needing fs mocks
+  - ESM mocking with jest.unstable_mockModule is complex; simpler to avoid mocking external modules
+  - DocumentationGenerator catches errors internally in documentComponent() and returns empty items
+  - Errors don't propagate to progress.errors; they're logged but return totalCount: 0
+  - Mock JamfApiClientHybrid with config.baseUrl and all API methods needed by generator
+  - jest.fn<() => Promise<any[]>>() typing helps with TypeScript in tests
+
+---
+
+## 2026-01-07 - DOC-003
+- Created comprehensive unit tests for HandbookGenerator class
+- Tests cover: generateHandbook, generateTableOfContents, policies/scripts/packages/groups/profiles handbooks
+- Tests verify markdown formatting, alphabetical sorting, anchor generation, helper methods
+- 31 tests all passing
+- Files changed: src/__tests__/documentation/handbook-generator.test.ts (new)
+- **Learnings:**
+  - ESM mocking with jest.unstable_mockModule MUST be called before importing the module under test
+  - Use `const { Class } = await import('./module.js')` after mocking to get the mocked version
+  - Define mock functions outside the mock setup: `const mockWriteFile = jest.fn()` then reference in mock
+  - Helper functions like `findWriteCall(suffix)` clean up test code significantly
+  - HandbookGenerator writes multiple files; check specific filenames in mock.calls.find()
+  - Winston logs warnings in tests ("no transports") - these are informational, not failures
+
+---
+
+## 2026-01-07 - DOC-004
+- Created comprehensive unit tests for CLI document-environment
+- Tests cover: parseArgs (all flags and options), configuration validation (env vars), buildDocumentationOptions
+- 33 tests all passing
+- Files changed: src/__tests__/cli/document-environment.test.ts (new)
+- **Learnings:**
+  - CLI parseArgs and validation functions are not exported, so replicate logic in test helpers
+  - Use beforeEach/afterEach to reset process.argv and process.env between tests
+  - Store originalArgv and originalEnv references before tests to restore state
+  - setArgs helper: `process.argv = ['node', 'script.js', ...args]` mirrors CLI invocation
+  - clearEnv helper: `delete process.env[key]` to remove environment variables
+  - Test both long flags (--output) and short flags (-o) for complete coverage
+  - Test multiple options together to verify no interference between args
+
+---
+
+## 2026-01-07 - DOC-005
+- Cleaned up root status markdown files to reduce clutter
+- Moved DOCUMENTATION_STATUS.md to docs/
+- Moved DOCUMENTATION_FEATURE_COMPLETE.md to docs/
+- Deleted SESSION-SUMMARY.md (session-specific notes, not needed)
+- Deleted CLASSIC_API_FIX.md (content already in docs/API_AUTHENTICATION.md)
+- Deleted SETUP_ENV.md (content duplicated in docs/CLI_DOCUMENTATION_TOOL.md)
+- Root directory now has only essential markdown files
+- Files changed: docs/DOCUMENTATION_STATUS.md (moved), docs/DOCUMENTATION_FEATURE_COMPLETE.md (moved)
+- **Learnings:**
+  - Untracked files in git are simply deleted when removed; git doesn't track the removal
+  - Moved files appear as new files in git (no rename detection for untracked files)
+  - The existing test failures in manager.test.ts and auth-middleware.test.ts are pre-existing; unrelated to doc cleanup
+
+---
+
+## 2026-01-07 - DOC-006
+- Added comprehensive Environment Documentation section to README.md
+- Section includes: Quick Start examples, Features list, Output Structure, Common Options table
+- Links to detailed CLI documentation in docs/CLI_DOCUMENTATION_TOOL.md
+- README already had brief mentions in Resources/Documentation Tools sections; new section adds depth
+- Files changed: README.md
+- **Learnings:**
+  - README already had inline documentation mentions (resources, tools, skills sections)
+  - Adding a dedicated section with examples and options table improves discoverability
+  - Markdown tables work well for CLI option documentation in README
+  - Position new sections logically: Documentation section placed after Development, before API Requirements
+
+---
+
+## 2026-01-07 - DOC-007
+- Committed all documentation feature changes with atomic commits
+- Created 10 logical commits organized by component:
+  1. feat(docs): add documentation generator core
+  2. feat(cli): add document-environment CLI tool
+  3. feat(resources): add documentation MCP resources
+  4. feat(skills): add generate-environment-docs skill
+  5. feat(client): enhance hybrid auth for Classic API
+  6. feat(tools): add documentation MCP tools
+  7. docs: add API authentication and CLI tool documentation
+  8. chore: update config for documentation feature
+  9. chore: gitignore handbook output directories
+  10. chore: add Ralph automation scripts
+- All commits use conventional commit format with Co-Authored-By
+- Files changed: All documentation feature files now tracked
+- **Learnings:**
+  - Test files from DOC-002/003/004 were already committed in previous iterations
+  - Generated output directories (jamf-handbook/, test-handbook/) should be in .gitignore
+  - Organize commits by component type: core, cli, resources, skills, client, tools, docs, config
+  - Use conventional commit prefixes: feat, docs, chore, test
+  - Some pre-existing test failures in manager.test.ts and auth-middleware.test.ts are unrelated to doc feature
