@@ -14,6 +14,8 @@ interface JamfMCPServer extends Server {
 
 export function createSkillContext(server: JamfMCPServer): SkillContext {
   return {
+    client: server.jamfClient,
+
     callTool: async (toolName: string, params: any): Promise<any> => {
       try {
         const result = await server.handleToolCall(toolName, params);

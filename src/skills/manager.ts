@@ -14,6 +14,7 @@ import { findOutdatedDevices, metadata as findOutdatedDevicesMetadata } from './
 import { batchInventoryUpdate, metadata as batchInventoryUpdateMetadata } from './device-management/batch-inventory-update.js';
 import { deployPolicyByCriteria, metadata as deployPolicyByCriteriaMetadata } from './policy-management/deploy-policy-by-criteria.js';
 import { scheduledComplianceCheck, metadata as scheduledComplianceCheckMetadata } from './automation/scheduled-compliance-check.js';
+import { generateEnvironmentDocs, metadata as generateEnvironmentDocsMetadata } from './documentation/generate-environment-docs.js';
 
 interface SkillDefinition {
   execute: (context: SkillContext, params: any) => Promise<SkillResult>;
@@ -56,6 +57,12 @@ export class SkillsManager {
     this.skills.set('scheduled-compliance-check', {
       execute: scheduledComplianceCheck,
       metadata: scheduledComplianceCheckMetadata
+    });
+
+    // Register documentation skills
+    this.skills.set('generate-environment-docs', {
+      execute: generateEnvironmentDocs,
+      metadata: generateEnvironmentDocsMetadata
     });
   }
 
@@ -333,6 +340,7 @@ export class SkillsManager {
       const category = name.includes('device') ? 'device-management' :
                       name.includes('policy') ? 'policy-management' :
                       name.includes('compliance') || name.includes('scheduled') ? 'automation' :
+                      name.includes('documentation') || name.includes('environment-docs') ? 'documentation' :
                       'other';
 
       catalog.push({

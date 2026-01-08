@@ -15,6 +15,9 @@ export { deployPolicyByCriteria } from './policy-management/deploy-policy-by-cri
 // Automation Skills
 export { scheduledComplianceCheck } from './automation/scheduled-compliance-check.js';
 
+// Documentation Skills
+export { generateEnvironmentDocs } from './documentation/generate-environment-docs.js';
+
 // Export types
 export * from './types.js';
 
@@ -49,6 +52,13 @@ export const skillRegistry = {
       name: 'scheduled-compliance-check',
       category: 'automation',
       description: 'Comprehensive compliance audit with reporting'
+    }
+  ],
+  documentation: [
+    {
+      name: 'generate-environment-docs',
+      category: 'documentation',
+      description: 'Generate comprehensive Jamf Pro environment documentation'
     }
   ]
 };

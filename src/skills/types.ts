@@ -7,7 +7,12 @@ export interface SkillContext {
    * Call a Jamf MCP tool
    */
   callTool: (toolName: string, params: any) => Promise<any>;
-  
+
+  /**
+   * Direct access to Jamf client (for complex operations)
+   */
+  client?: any;
+
   /**
    * Access to environment configuration
    */
@@ -15,7 +20,7 @@ export interface SkillContext {
     jamfUrl: string;
     [key: string]: string;
   };
-  
+
   /**
    * Logger instance
    */
