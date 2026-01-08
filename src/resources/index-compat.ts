@@ -5,6 +5,9 @@ import {
   Resource,
   TextContent,
 } from '@modelcontextprotocol/sdk/types.js';
+import {
+  getDocumentationResourceDefinitions
+} from './documentation-resources.js';
 
 export function registerResources(server: Server, jamfClient: any): void {
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
@@ -45,6 +48,8 @@ export function registerResources(server: Server, jamfClient: any): void {
         description: 'Generate a compliance report for mobile devices showing management status and issues',
         mimeType: 'application/json',
       },
+      // Add documentation resources
+      ...getDocumentationResourceDefinitions(),
     ];
 
     return { resources };
@@ -52,6 +57,13 @@ export function registerResources(server: Server, jamfClient: any): void {
 
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     const { uri } = request.params;
+
+    // Handle documentation resources
+    if (uri.startsWith('jamf://documentation/')) {
+      const docPath = uri.replace('jamf://documentation/', '');
+      const { handleDocumentationResource } = await import('./documentation-resources.js');
+      return await handleDocumentationResource(uri, docPath);
+    }
 
     try {
       switch (uri) {
