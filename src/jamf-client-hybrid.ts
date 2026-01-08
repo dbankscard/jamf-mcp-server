@@ -97,10 +97,17 @@ export class JamfApiClientHybrid {
     
     // Add request interceptor to handle auth based on endpoint
     this.axiosInstance.interceptors.request.use((config) => {
-      // Classic API endpoints need Basic auth
+      // Classic API endpoints - try Bearer token first, fallback to Basic auth
       if (config.url?.includes('/JSSResource/')) {
-        if (this.basicAuthHeader) {
+        // Try Bearer token first (some Jamf environments require this)
+        if (this.bearerTokenAvailable && this.bearerToken) {
+          config.headers['Authorization'] = `Bearer ${this.bearerToken.token}`;
+          logger.info(`  🔑 Setting Bearer token for Classic API endpoint: ${config.url}`);
+        } else if (this.basicAuthHeader) {
           config.headers['Authorization'] = this.basicAuthHeader;
+          logger.info(`  🔑 Setting Basic Auth for Classic API endpoint: ${config.url}`);
+        } else {
+          logger.warn(`Classic API endpoint ${config.url} requested but no auth credentials available`);
         }
         // Note: We keep Accept as application/json for Classic API
         // Jamf Classic API can return JSON if Accept header is set to application/json
@@ -243,12 +250,18 @@ export class JamfApiClientHybrid {
     
     // Test Classic API
     try {
-      await this.axiosInstance.get('/JSSResource/categories');
+      logger.info(`  Testing Classic API with Basic Auth: ${this.hasBasicAuth ? 'Available' : 'Not configured'}`);
+      const response = await this.axiosInstance.get('/JSSResource/categories');
       logger.info('  ✅ Classic API: Accessible');
     } catch (error) {
-      logger.warn('Classic API not accessible', { 
+      const axiosError = error as AxiosError;
+      logger.warn('Classic API not accessible', {
         error: error instanceof Error ? error.message : String(error),
-        endpoint: '/JSSResource/categories'
+        endpoint: '/JSSResource/categories',
+        status: axiosError.response?.status,
+        statusText: axiosError.response?.statusText,
+        hasBasicAuth: this.hasBasicAuth,
+        responseData: axiosError.response?.data
       });
     }
   }
@@ -542,15 +555,34 @@ export class JamfApiClientHybrid {
   // List policies
   async listPolicies(limit: number = 100): Promise<any[]> {
     await this.ensureAuthenticated();
-    
+
+    // Try Modern API first (v1)
     try {
-      // Try Classic API (policies are typically in Classic API)
-      const response = await this.axiosInstance.get('/JSSResource/policies');
-      const policies = response.data.policies || [];
-      return policies.slice(0, limit);
-    } catch (error) {
-      logger.info('Failed to list policies:', error);
-      return [];
+      const response = await this.axiosInstance.get('/api/v1/policies', {
+        params: {
+          page: 0,
+          'page-size': Math.min(limit, 2000),
+        },
+      });
+      const policies = response.data.results || [];
+      logger.info(`Retrieved ${policies.length} policies from Modern API`);
+      return policies;
+    } catch (modernError) {
+      logger.info('Modern API not available for policies, trying Classic API');
+
+      // Fallback to Classic API
+      try {
+        const response = await this.axiosInstance.get('/JSSResource/policies');
+        const policies = response.data.policies || [];
+        logger.info(`Retrieved ${policies.length} policies from Classic API`);
+        return policies.slice(0, limit);
+      } catch (classicError) {
+        logger.warn('Failed to list policies from both Modern and Classic APIs', {
+          modernError: modernError instanceof Error ? modernError.message : String(modernError),
+          classicError: classicError instanceof Error ? classicError.message : String(classicError),
+        });
+        return [];
+      }
     }
   }
 
