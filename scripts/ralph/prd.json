@@ -1,0 +1,118 @@
+{
+  "branchName": "documentme",
+  "description": "Finalize and merge the documentation feature branch",
+  "userStories": [
+    {
+      "id": "DOC-001",
+      "title": "Fix Jest dependency issue",
+      "acceptanceCriteria": [
+        "Run npm install to fix missing @jridgewell/set-array",
+        "npm test passes without module errors",
+        "npm run typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Jest is failing due to missing dependency. Run npm install to resolve."
+    },
+    {
+      "id": "DOC-002",
+      "title": "Add unit tests for documentation generator",
+      "acceptanceCriteria": [
+        "Create src/__tests__/documentation/generator.test.ts",
+        "Test DocumentationGenerator class methods",
+        "Test error handling for API failures",
+        "npm test passes",
+        "npm run typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "New documentation code in src/documentation/ needs test coverage"
+    },
+    {
+      "id": "DOC-003",
+      "title": "Add unit tests for handbook generator",
+      "acceptanceCriteria": [
+        "Create src/__tests__/documentation/handbook-generator.test.ts",
+        "Test HandbookGenerator class methods",
+        "Test markdown generation formatting",
+        "npm test passes",
+        "npm run typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "The handbook-generator.ts creates the human-readable markdown output"
+    },
+    {
+      "id": "DOC-004",
+      "title": "Add unit tests for CLI document-environment",
+      "acceptanceCriteria": [
+        "Create src/__tests__/cli/document-environment.test.ts",
+        "Test CLI argument parsing",
+        "Test configuration validation",
+        "npm test passes",
+        "npm run typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "CLI tool in src/cli/document-environment.ts needs test coverage"
+    },
+    {
+      "id": "DOC-005",
+      "title": "Clean up root status markdown files",
+      "acceptanceCriteria": [
+        "Move DOCUMENTATION_STATUS.md to docs/",
+        "Move DOCUMENTATION_FEATURE_COMPLETE.md to docs/",
+        "Remove or consolidate SESSION-SUMMARY.md",
+        "Remove or consolidate CLASSIC_API_FIX.md",
+        "Remove SETUP_ENV.md if content is in other docs",
+        "Root directory has minimal markdown files",
+        "npm run typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "Too many status files in root. Consolidate into docs/ folder."
+    },
+    {
+      "id": "DOC-006",
+      "title": "Update README with documentation feature",
+      "acceptanceCriteria": [
+        "Add Documentation section to README.md",
+        "Include npm run document:env usage examples",
+        "Document the handbook output format",
+        "Link to detailed docs in docs/ folder",
+        "npm run typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "README needs to mention the new documentation capabilities"
+    },
+    {
+      "id": "DOC-007",
+      "title": "Commit all documentation feature changes",
+      "acceptanceCriteria": [
+        "Stage all new and modified files",
+        "Create atomic commits by component",
+        "Use conventional commit format",
+        "All changes committed to documentme branch",
+        "git status shows clean working tree"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Organize changes into logical commits: core generator, CLI tool, tests, docs"
+    },
+    {
+      "id": "DOC-008",
+      "title": "Create pull request to main",
+      "acceptanceCriteria": [
+        "Push documentme branch to origin",
+        "Create PR with comprehensive description",
+        "PR summary lists all new features",
+        "PR includes test plan",
+        "PR URL returned"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Final step - create PR for review"
+    }
+  ]
+}

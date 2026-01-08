@@ -1,0 +1,56 @@
+# Ralph Progress Log
+Started: 2025-01-07
+Feature: Documentation Branch Finalization
+
+## Codebase Patterns
+- TypeScript project with ES modules ("type": "module")
+- Types: Define in src/types/, use Zod for validation
+- Skills: Register in src/skills/index.ts, implement in src/skills/{category}/
+- Tools: Register in src/tools/index-compat.ts
+- Resources: Register in src/resources/index-compat.ts
+- Tests: Jest with experimental VM modules, place in src/__tests__/
+- Build: tsc compiles to dist/
+- Documentation: Generators in src/documentation/, CLI in src/cli/
+
+## Key Files - Documentation Feature
+- src/documentation/generator.ts - Base documentation generator
+- src/documentation/generator-enhanced.ts - AI-powered analysis
+- src/documentation/handbook-generator.ts - Human-readable handbook output
+- src/documentation/types.ts - Documentation types
+- src/cli/document-environment.ts - CLI entry point
+- src/cli/ai-client.ts - Claude API integration
+- src/jamf-client-hybrid.ts - Hybrid auth (Modern + Classic API)
+
+## Key Files - Core
+- src/index-main.ts - Main MCP server entry point
+- src/skills/manager.ts - Skills registration and execution
+- src/tools/index-compat.ts - Tool definitions
+- src/types/jamf-api.ts - Jamf API types
+- package.json - npm scripts: typecheck, test, build:quick, lint
+
+## Commands
+- npm run typecheck - Type checking
+- npm test - Run all tests (includes test:skills + test:jest)
+- npm run build:quick - Quick build (tsc only)
+- npm run lint - ESLint
+- npm run document:env - Run documentation CLI
+
+## Current State
+- Branch: documentme
+- Feature complete but not merged
+- Typecheck: Passing
+- Tests: Jest dependency fixed, but existing tests outdated (assertion failures)
+- Untracked files: docs/, src/cli/, src/documentation/, etc.
+
+---
+
+## 2026-01-07 - DOC-001
+- Fixed Jest dependency issue by installing @jridgewell/set-array and @jest/core/@jest/reporters
+- Jest now runs successfully (no module loading errors)
+- npm run typecheck passes
+- Files changed: package-lock.json (updated dependencies)
+- **Learnings:**
+  - The skills/manager.test.ts expects 'device-search-optimized' but code uses 'device-search'
+  - Tests also expect getChatGPTSchema() method which doesn't exist anymore
+  - auth-middleware.test.ts has import error for non-existent export
+  - These are test assertion failures, not module dependency issues
