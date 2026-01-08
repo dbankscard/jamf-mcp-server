@@ -31,7 +31,9 @@
     "agent": "tsx src/agent/interface/CLIInterface.ts",
     "agent:simple": "tsx src/agent/simple-cli.ts",
     "agent:example": "tsx examples/agent-example.ts",
-    "agent:demo": "tsx examples/agent-demo.ts"
+    "agent:demo": "tsx examples/agent-demo.ts",
+    "document:env": "tsx src/cli/document-environment.ts",
+    "document:env:prod": "node dist/cli/document-environment.js"
   },
   "keywords": [
     "mcp",
@@ -51,6 +53,10 @@
   "homepage": "https://github.com/dbankscard/jamf-mcp-server#readme",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@jest/core": "^30.2.0",
+    "@jest/reporters": "^30.2.0",
+    "@jridgewell/set-array": "^1.2.1",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "axios": "^1.7.0",
     "compression": "^1.8.1",

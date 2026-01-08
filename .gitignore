@@ -58,6 +58,9 @@ tool-questions.md
 TROUBLESHOOTING_MCP.md
 TESTING_GUIDE.md
 
+# Generated documentation output
+jamf-documentation/
+
 # Temporary files
 *.tmp
 *.temp
