@@ -42,6 +42,12 @@ npm install
 npm run build
 ```
 
+### For Claude Code Users
+```bash
+# Add MCP Claude Code
+claude mcp add --transport http https://developer.jamf.com/mcp
+```
+
 Configure your credentials in Claude Desktop (see Configuration section below).
 
 ## 🎯 What You Can Do
