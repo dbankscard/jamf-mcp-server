@@ -87,5 +87,5 @@ export function initializeSkillsForHttp(
   };
   
   // Initialize the skills manager with this context
-  (skillsManager as any).context = context;
+  skillsManager.context = context;
 }

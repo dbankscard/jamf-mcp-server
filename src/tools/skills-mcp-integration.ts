@@ -7,9 +7,11 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  TextContent
+  TextContent,
+  Tool
 } from '@modelcontextprotocol/sdk/types.js';
 import { SkillsManager } from '../skills/manager.js';
+import { SkillContext } from '../skills/types.js';
 import { JamfApiClientHybrid } from '../jamf-client-hybrid.js';
 import {
   searchDevices,
@@ -26,16 +28,18 @@ import { createLogger } from '../server/logger.js';
 const skillLogger = createLogger('Skills');
 
 export function registerSkillsAsMCPTools(
-  server: Server, 
+  server: Server,
   skillsManager: SkillsManager,
   jamfClient: JamfApiClientHybrid
 ): void {
   // Create a context for skills that can call tool implementations directly
-  const skillContext = {
-    callTool: async (toolName: string, params: any) => {
+  const skillContext: SkillContext = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    callTool: async (toolName: string, params: any): Promise<any> => {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let result: any;
-        
+
         // Map tool names to implementations
         switch (toolName) {
           case 'searchDevices':
@@ -65,50 +69,57 @@ export function registerSkillsAsMCPTools(
           default:
             throw new Error(`Unknown tool: ${toolName}`);
         }
-        
+
         return { data: result };
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`Tool execution failed: ${message}`);
       }
     },
-    
+
     env: {
       jamfUrl: process.env.JAMF_URL || '',
       jamfClientId: process.env.JAMF_CLIENT_ID || '',
     },
-    
+
     logger: {
-      info: (message: string, meta?: Record<string, unknown>) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      info: (message: string, meta?: any) => {
         skillLogger.info(message, meta);
       },
-      warn: (message: string, meta?: Record<string, unknown>) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      warn: (message: string, meta?: any) => {
         skillLogger.warn(message, meta);
       },
-      error: (message: string, meta?: Record<string, unknown>) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      error: (message: string, meta?: any) => {
         skillLogger.error(message, meta);
       }
     }
   };
-  
+
   // Initialize the skills manager with this context
-  (skillsManager as any).context = skillContext;
+  skillsManager.context = skillContext;
 
   // Get original handlers to extend them
-  const originalListToolsHandler = (server as any).getHandler?.(ListToolsRequestSchema) || 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const originalListToolsHandler = (server as any).getHandler?.(ListToolsRequestSchema) ||
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                   (server as any).__handlers?.['tools/list'];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const originalCallToolHandler = (server as any).getHandler?.(CallToolRequestSchema) ||
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                  (server as any).__handlers?.['tools/call'];
 
   // Register the list tools handler that includes skills
   server.setRequestHandler(ListToolsRequestSchema, async (request) => {
     // Get original tools if handler exists
-    let tools = [];
+    let tools: Tool[] = [];
     if (originalListToolsHandler) {
       try {
         const result = await originalListToolsHandler(request);
         tools = result.tools || [];
-      } catch (e) {
+      } catch {
         // If no original handler, start with empty array
         tools = [];
       }
@@ -116,7 +127,7 @@ export function registerSkillsAsMCPTools(
 
     // Add skill tools
     const skillTools = skillsManager.getMCPTools();
-    
+
     return {
       tools: [...tools, ...skillTools]
     };
@@ -129,10 +140,10 @@ export function registerSkillsAsMCPTools(
     // Check if this is a skill tool
     if (name.startsWith('skill_')) {
       const skillName = name.substring(6).replace(/_/g, '-');
-      
+
       try {
-        const result = await skillsManager.executeSkill(skillName, args);
-        
+        const result = await skillsManager.executeSkill(skillName, args || {});
+
         return {
           content: [
             {
@@ -159,7 +170,7 @@ export function registerSkillsAsMCPTools(
     if (originalCallToolHandler) {
       return await originalCallToolHandler(request);
     }
-    
+
     throw new Error(`Unknown tool: ${name}`);
   });
 }

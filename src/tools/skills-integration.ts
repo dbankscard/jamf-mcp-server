@@ -11,22 +11,27 @@ import {
   TextContent
 } from '@modelcontextprotocol/sdk/types.js';
 import { SkillsManager } from '../skills/manager.js';
+import { SkillContext } from '../skills/types.js';
+import { JamfApiClientHybrid } from '../jamf-client-hybrid.js';
 import { createLogger } from '../server/logger.js';
 
 const skillLogger = createLogger('Skills');
 
 // Store original handlers
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let originalListToolsHandler: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let originalCallToolHandler: any = null;
 
 export function integrateSkillsWithTools(
-  server: Server, 
+  server: Server,
   skillsManager: SkillsManager,
-  jamfClient: any
+  jamfClient: JamfApiClientHybrid
 ): void {
   // Initialize the skills manager with a proper context
-  const skillContext = {
-    callTool: async (toolName: string, params: any) => {
+  const skillContext: SkillContext = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    callTool: async (toolName: string, params: any): Promise<any> => {
       // Call the original tool handler
       if (originalCallToolHandler) {
         const request = {
@@ -44,22 +49,26 @@ export function integrateSkillsWithTools(
       jamfClientId: process.env.JAMF_CLIENT_ID || '',
     },
     logger: {
-      info: (message: string, meta?: Record<string, unknown>) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      info: (message: string, meta?: any) => {
         skillLogger.info(message, meta);
       },
-      warn: (message: string, meta?: Record<string, unknown>) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      warn: (message: string, meta?: any) => {
         skillLogger.warn(message, meta);
       },
-      error: (message: string, meta?: Record<string, unknown>) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      error: (message: string, meta?: any) => {
         skillLogger.error(message, meta);
       }
     },
-    jamfClient // Add jamfClient to context for direct access if needed
+    client: jamfClient
   };
-  
-  skillsManager.initialize(skillContext as any);
+
+  skillsManager.context = skillContext;
 
   // Store the original handlers before overriding
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handlers = (server as any).__handlers || {};
   originalListToolsHandler = handlers['tools/list'];
   originalCallToolHandler = handlers['tools/call'];
@@ -89,10 +98,10 @@ export function integrateSkillsWithTools(
     // Check if this is a skill tool
     if (name.startsWith('skill_')) {
       const skillName = name.substring(6).replace(/_/g, '-');
-      
+
       try {
-        const result = await skillsManager.executeSkill(skillName, args);
-        
+        const result = await skillsManager.executeSkill(skillName, args || {});
+
         return {
           content: [
             {
@@ -119,11 +128,12 @@ export function integrateSkillsWithTools(
     if (originalCallToolHandler) {
       return await originalCallToolHandler(request);
     }
-    
+
     throw new Error(`Unknown tool: ${name}`);
   });
 
   // Store handlers for future reference
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (server as any).__handlers = {
     ...handlers,
     ['tools/list']: originalListToolsHandler,

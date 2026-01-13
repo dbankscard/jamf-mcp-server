@@ -1964,7 +1964,37 @@ export function registerTools(server: Server, jamfClient: any): void {
           const now = new Date();
           const cutoffDate = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000));
           
-          const results = {
+          /** Device compliance info structure */
+          interface ComplianceDeviceInfo {
+            id: string | undefined;
+            name: string | undefined;
+            serialNumber: string | undefined;
+            username: string | undefined;
+            lastContact: string;
+            lastContactReadable: string;
+            daysSinceContact: number | null;
+            status: string;
+            severity?: string;
+          }
+
+          const results: {
+            totalDevices: number;
+            compliant: number;
+            nonCompliant: number;
+            notReporting: number;
+            unknown: number;
+            complianceRate: string;
+            summary: {
+              totalDevices: number;
+              compliant: number;
+              warning: number;
+              critical: number;
+              unknown: number;
+              criticalDevices: ComplianceDeviceInfo[];
+              warningDevices: ComplianceDeviceInfo[];
+            };
+            devices: ComplianceDeviceInfo[] | undefined;
+          } = {
             totalDevices: allComputers.length,
             compliant: 0,
             nonCompliant: 0,
@@ -1977,10 +2007,10 @@ export function registerTools(server: Server, jamfClient: any): void {
               warning: 0,
               critical: 0,
               unknown: 0,
-              criticalDevices: [] as any[],
-              warningDevices: [] as any[],
+              criticalDevices: [],
+              warningDevices: [],
             },
-            devices: includeDetails ? [] as any[] : undefined,
+            devices: includeDetails ? [] : undefined,
           };
           
           // Process all computers without fetching individual details

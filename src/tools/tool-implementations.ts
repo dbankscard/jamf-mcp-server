@@ -71,10 +71,14 @@ export async function checkDeviceCompliance(client: JamfApiClientHybrid, params:
   };
 }
 
-export async function updateInventory(client: JamfApiClientHybrid, params: any) {
-  const { deviceId } = params;
-  
-  if ((client as any).readOnlyMode) {
+export interface UpdateInventoryParams {
+  deviceId: string;
+}
+
+export async function updateInventory(client: JamfApiClientHybrid, params: UpdateInventoryParams | Record<string, unknown>) {
+  const { deviceId } = params as UpdateInventoryParams;
+
+  if (client.readOnlyMode) {
     throw new Error('Cannot update inventory in read-only mode');
   }
   
@@ -107,21 +111,34 @@ export async function getDeviceDetails(client: JamfApiClientHybrid, params: Devi
   };
 }
 
-export async function executePolicy(client: JamfApiClientHybrid, params: any) {
-  const { policyId, deviceIds, confirm = false } = params;
-  
+export interface ExecutePolicyParams {
+  policyId: string;
+  deviceIds: string[];
+  confirm?: boolean;
+}
+
+export interface ExecutionResult {
+  deviceId: string;
+  status: string;
+  error?: string;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function executePolicy(client: JamfApiClientHybrid, params: ExecutePolicyParams | any) {
+  const { policyId, deviceIds, confirm = false } = params as ExecutePolicyParams;
+
   if (!confirm) {
     throw new Error('Policy execution requires confirmation. Set confirm: true to proceed.');
   }
-  
-  if ((client as any).readOnlyMode) {
+
+  if (client.readOnlyMode) {
     throw new Error('Cannot execute policies in read-only mode');
   }
-  
-  const results = [];
+
+  const results: ExecutionResult[] = [];
   for (const deviceId of deviceIds) {
     try {
-      await client.executePolicy(policyId, deviceId);
+      await client.executePolicy(policyId, [deviceId]);
       results.push({ deviceId, status: 'success' });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);

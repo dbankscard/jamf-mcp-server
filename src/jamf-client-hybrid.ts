@@ -55,7 +55,7 @@ export class JamfApiClientHybrid {
   private oauth2Token: JamfAuthToken | null = null;
   private bearerToken: JamfAuthToken | null = null;
   private basicAuthHeader: string | null = null;
-  private readOnlyMode: boolean;
+  private _readOnlyMode: boolean;
   private config: JamfApiClientConfig;
   
   // Capabilities flags
@@ -69,7 +69,7 @@ export class JamfApiClientHybrid {
 
   constructor(config: JamfApiClientConfig) {
     this.config = config;
-    this.readOnlyMode = config.readOnlyMode ?? false;
+    this._readOnlyMode = config.readOnlyMode ?? false;
     
     // Check available auth methods
     this.hasOAuth2 = !!(config.clientId && config.clientSecret);
@@ -126,6 +126,13 @@ export class JamfApiClientHybrid {
     // logger.info(`Jamf Hybrid Client initialized with:`);
     // logger.info(`  - OAuth2 (Client Credentials): ${this.hasOAuth2 ? 'Available' : 'Not configured'}`);
     // logger.info(`  - Basic Auth (Bearer Token): ${this.hasBasicAuth ? 'Available' : 'Not configured'}`);
+  }
+
+  /**
+   * Check if the client is in read-only mode
+   */
+  get readOnlyMode(): boolean {
+    return this._readOnlyMode;
   }
 
   /**
@@ -494,7 +501,7 @@ export class JamfApiClientHybrid {
 
   // Execute policy (if not in read-only mode)
   async executePolicy(policyId: string, deviceIds: string[]): Promise<void> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot execute policies in read-only mode');
     }
     
@@ -507,7 +514,7 @@ export class JamfApiClientHybrid {
 
   // Deploy script (if not in read-only mode)
   async deployScript(scriptId: string, deviceIds: string[]): Promise<void> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot deploy scripts in read-only mode');
     }
     
@@ -522,7 +529,7 @@ export class JamfApiClientHybrid {
 
   // Update inventory (if not in read-only mode)
   async updateInventory(deviceId: string): Promise<void> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot update inventory in read-only mode');
     }
     
@@ -629,7 +636,7 @@ export class JamfApiClientHybrid {
    * Create a new policy
    */
   async createPolicy(policyData: any): Promise<any> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot create policies in read-only mode');
     }
     
@@ -686,7 +693,7 @@ export class JamfApiClientHybrid {
    * Update an existing policy
    */
   async updatePolicy(policyId: string, policyData: any): Promise<any> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot update policies in read-only mode');
     }
     
@@ -733,7 +740,7 @@ export class JamfApiClientHybrid {
    * Clone an existing policy
    */
   async clonePolicy(sourcePolicyId: string, newName: string): Promise<any> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot clone policies in read-only mode');
     }
     
@@ -765,7 +772,7 @@ export class JamfApiClientHybrid {
    * Enable or disable a policy
    */
   async setPolicyEnabled(policyId: string, enabled: boolean): Promise<any> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot enable/disable policies in read-only mode');
     }
     
@@ -800,7 +807,7 @@ export class JamfApiClientHybrid {
     replaceComputers?: string[];
     replaceComputerGroups?: string[];
   }): Promise<any> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot update policy scope in read-only mode');
     }
     
@@ -1153,7 +1160,7 @@ export class JamfApiClientHybrid {
    * Deploy configuration profile to devices
    */
   async deployConfigurationProfile(profileId: string, deviceIds: string[], type: 'computer' | 'mobiledevice' = 'computer'): Promise<void> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot deploy configuration profiles in read-only mode');
     }
     
@@ -1225,7 +1232,7 @@ export class JamfApiClientHybrid {
    * Remove configuration profile from devices
    */
   async removeConfigurationProfile(profileId: string, deviceIds: string[], type: 'computer' | 'mobiledevice' = 'computer'): Promise<void> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot remove configuration profiles in read-only mode');
     }
     
@@ -1556,7 +1563,7 @@ export class JamfApiClientHybrid {
    * Create static computer group
    */
   async createStaticComputerGroup(name: string, computerIds: string[]): Promise<any> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot create computer groups in read-only mode');
     }
     
@@ -1600,7 +1607,7 @@ export class JamfApiClientHybrid {
    * Update static computer group membership
    */
   async updateStaticComputerGroup(groupId: string, computerIds: string[]): Promise<any> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot update computer groups in read-only mode');
     }
     
@@ -1661,7 +1668,7 @@ export class JamfApiClientHybrid {
    * Delete computer group
    */
   async deleteComputerGroup(groupId: string): Promise<void> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot delete computer groups in read-only mode');
     }
     
@@ -1762,7 +1769,7 @@ export class JamfApiClientHybrid {
    * Update mobile device inventory
    */
   async updateMobileDeviceInventory(deviceId: string): Promise<void> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot update mobile device inventory in read-only mode');
     }
     
@@ -1813,7 +1820,7 @@ export class JamfApiClientHybrid {
    * Send MDM command to mobile device
    */
   async sendMDMCommand(deviceId: string, command: string): Promise<void> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot send MDM commands in read-only mode');
     }
     
@@ -1952,7 +1959,7 @@ export class JamfApiClientHybrid {
     os_requirements?: string;
     script_contents_encoded?: boolean;
   }): Promise<any> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot create scripts in read-only mode');
     }
     
@@ -2015,7 +2022,7 @@ export class JamfApiClientHybrid {
     os_requirements?: string;
     script_contents_encoded?: boolean;
   }): Promise<any> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot update scripts in read-only mode');
     }
     
@@ -2050,7 +2057,7 @@ export class JamfApiClientHybrid {
    * Delete a script
    */
   async deleteScript(scriptId: string): Promise<void> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot delete scripts in read-only mode');
     }
     
@@ -2879,7 +2886,7 @@ export class JamfApiClientHybrid {
     }>;
     display_fields?: string[];
   }): Promise<any> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot create advanced computer searches in read-only mode');
     }
 
@@ -3015,7 +3022,7 @@ export class JamfApiClientHybrid {
    * Delete an advanced computer search
    */
   async deleteAdvancedComputerSearch(searchId: string): Promise<void> {
-    if (this.readOnlyMode) {
+    if (this._readOnlyMode) {
       throw new Error('Cannot delete advanced computer searches in read-only mode');
     }
     

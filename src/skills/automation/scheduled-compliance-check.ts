@@ -5,7 +5,49 @@
  * actionable reports for IT administrators.
  */
 
-import { SkillContext, SkillResult } from '../types.js';
+import { SkillContext, SkillResult, SkillMetadata } from '../types.js';
+
+/** Profile search result from the compliance check */
+interface MissingProfileEntry {
+  name: string;
+  status: 'not_found' | 'found';
+}
+
+/** Device OS compliance result */
+interface OsNonCompliantDevice {
+  name: string;
+  currentVersion: string;
+  id: string;
+}
+
+/** Device result from compliance check */
+interface ComplianceDevice {
+  name?: string;
+  osVersion?: string;
+  id?: string;
+  lastContactTime?: string;
+}
+
+/** Check result types */
+interface CheckResults {
+  outdatedDevices?: {
+    passed: boolean;
+    count: number;
+    devices: ComplianceDevice[];
+    threshold: number;
+  };
+  osVersionCompliance?: {
+    passed: boolean;
+    minimumRequired: string;
+    nonCompliantCount: number;
+    devices: OsNonCompliantDevice[];
+  };
+  missingProfiles?: {
+    passed: boolean;
+    missingProfiles: MissingProfileEntry[];
+    affectedDevices: number;
+  };
+}
 
 interface ScheduledComplianceCheckParams {
   checks: {
@@ -35,7 +77,7 @@ export async function scheduledComplianceCheck(
 ): Promise<SkillResult> {
   const results = {
     timestamp: new Date().toISOString(),
-    checks: {} as Record<string, any>,
+    checks: {} as CheckResults,
     summary: {
       totalIssues: 0,
       criticalIssues: 0,
@@ -67,9 +109,13 @@ export async function scheduledComplianceCheck(
 
     // Check for missing configuration profiles
     if (params.checks.missingProfiles?.enabled) {
-      const profileResults = {
+      const profileResults: {
+        passed: boolean;
+        missingProfiles: MissingProfileEntry[];
+        affectedDevices: number;
+      } = {
         passed: true,
-        missingProfiles: [] as any[],
+        missingProfiles: [],
         affectedDevices: 0
       };
 
@@ -103,8 +149,8 @@ export async function scheduledComplianceCheck(
         limit: 100
       });
 
-      const devices = searchResult.data?.devices || [];
-      const nonCompliantDevices = devices.filter((device: any) => {
+      const devices = (searchResult.data?.devices || []) as ComplianceDevice[];
+      const nonCompliantDevices = devices.filter((device) => {
         const deviceVersion = device.osVersion || '';
         return deviceVersion < params.checks.osVersionCompliance!.minimumVersion;
       });
@@ -113,10 +159,10 @@ export async function scheduledComplianceCheck(
         passed: nonCompliantDevices.length === 0,
         minimumRequired: params.checks.osVersionCompliance.minimumVersion,
         nonCompliantCount: nonCompliantDevices.length,
-        devices: nonCompliantDevices.map((d: any) => ({
-          name: d.name,
-          currentVersion: d.osVersion,
-          id: d.id
+        devices: nonCompliantDevices.map((d) => ({
+          name: d.name || 'Unknown',
+          currentVersion: d.osVersion || 'Unknown',
+          id: d.id || ''
         }))
       };
 
@@ -150,9 +196,10 @@ export async function scheduledComplianceCheck(
         if (!results.checks.outdatedDevices.passed && params.outputFormat === 'detailed') {
           report += `| Device | Last Check-in | Days Outdated |\n`;
           report += `|--------|---------------|---------------|\n`;
-          results.checks.outdatedDevices.devices.slice(0, 10).forEach((device: any) => {
-            const daysSince = Math.floor((Date.now() - new Date(device.lastContactTime).getTime()) / (1000 * 60 * 60 * 24));
-            report += `| ${device.name} | ${new Date(device.lastContactTime).toLocaleDateString()} | ${daysSince} |\n`;
+          results.checks.outdatedDevices.devices.slice(0, 10).forEach((device) => {
+            const lastContactTime = device.lastContactTime || new Date().toISOString();
+            const daysSince = Math.floor((Date.now() - new Date(lastContactTime).getTime()) / (1000 * 60 * 60 * 24));
+            report += `| ${device.name || 'Unknown'} | ${new Date(lastContactTime).toLocaleDateString()} | ${daysSince} |\n`;
           });
           report += `\n`;
         }
@@ -168,7 +215,7 @@ export async function scheduledComplianceCheck(
         if (!results.checks.osVersionCompliance.passed && params.outputFormat === 'detailed') {
           report += `| Device | Current Version |\n`;
           report += `|--------|----------------|\n`;
-          results.checks.osVersionCompliance.devices.slice(0, 10).forEach((device: any) => {
+          results.checks.osVersionCompliance.devices.slice(0, 10).forEach((device) => {
             report += `| ${device.name} | ${device.currentVersion} |\n`;
           });
           report += `\n`;
@@ -181,7 +228,7 @@ export async function scheduledComplianceCheck(
         report += `- **Status**: ${results.checks.missingProfiles.passed ? '✅ Passed' : '❌ Failed'}\n`;
         if (results.checks.missingProfiles.missingProfiles.length > 0) {
           report += `- **Missing Profiles**:\n`;
-          results.checks.missingProfiles.missingProfiles.forEach((profile: any) => {
+          results.checks.missingProfiles.missingProfiles.forEach((profile) => {
             report += `  - ${profile.name}: ${profile.status}\n`;
           });
         }
@@ -234,7 +281,7 @@ export async function scheduledComplianceCheck(
 }
 
 // Skill metadata
-export const metadata: any = {
+export const metadata: SkillMetadata = {
   name: 'scheduled-compliance-check',
   description: 'Perform comprehensive compliance checks and generate reports',
   parameters: {

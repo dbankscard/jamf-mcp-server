@@ -7,6 +7,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, Tool, TextContent } from '@modelcontextprotocol/sdk/types.js';
 import { SkillsManager } from '../skills/manager.js';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function registerSkillTools(server: Server & { handleToolCall?: any }, skillsManager: SkillsManager): void {
   // Initialize the skills manager with server context
   skillsManager.initialize(server);
@@ -21,10 +22,10 @@ export function registerSkillTools(server: Server & { handleToolCall?: any }, sk
     // Check if this is a skill tool
     if (name.startsWith('skill_')) {
       const skillName = name.substring(6).replace(/_/g, '-');
-      
+
       try {
-        const result = await skillsManager.executeSkill(skillName, args);
-        
+        const result = await skillsManager.executeSkill(skillName, args || {});
+
         return {
           content: [
             {
@@ -51,7 +52,7 @@ export function registerSkillTools(server: Server & { handleToolCall?: any }, sk
     if (server.handleToolCall) {
       return await server.handleToolCall(name, args);
     }
-    
+
     throw new Error(`Unknown tool: ${name}`);
   });
 
