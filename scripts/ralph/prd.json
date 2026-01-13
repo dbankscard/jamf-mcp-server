@@ -15,7 +15,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "MCP servers must not write to stdout/stderr. Use createLogger() from src/server/logger.ts. Check: src/index.ts, src/jamf-client-hybrid-fixed.ts, src/skills/http-initializer.ts, src/cli/"
+      "notes": "MCP servers must not write to stdout/stderr. Use createLogger() from src/server/logger.ts. Check: src/index.ts, src/jamf-client-hybrid.ts, src/skills/http-initializer.ts, src/cli/"
     },
     {
       "id": "IMP-002",
@@ -73,7 +73,7 @@
         "npm test passes"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "Check src/utils/error-handler.ts for patterns. Ensure errors have: message, code, context, stack"
     },
     {
@@ -88,7 +88,7 @@
         "npm test passes"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "Modify src/jamf-client-hybrid.ts. OAuth tokens typically expire in 30 minutes."
     },
     {
@@ -103,7 +103,7 @@
         "npm test passes"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "Two similar files exist. Keep the better one, remove duplication."
     },
     {

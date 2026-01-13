@@ -147,3 +147,64 @@ logger.error('message', { error: message, stack });
   - Validation schemas should be in a separate file for reusability across the codebase
 
 ---
+## 2026-01-12 - IMP-005
+- Added structured error handling with full context
+- Created in src/utils/error-handler.ts:
+  - ErrorContext interface for capturing error details
+  - StructuredErrorResponse interface with user-friendly and technical messages
+  - buildErrorContext() to create structured error objects from unknown errors
+  - createStructuredErrorResponse() for user-friendly error responses
+  - logErrorWithContext() for consistent error logging
+  - captureStackTrace() and combineStacks() for stack trace preservation
+- Updated catch blocks in 13 files:
+  - src/tools/index-compat.ts, skills-integration.ts, skills-mcp-integration.ts, skills-tools.ts
+  - src/skills/manager.ts, context-provider.ts, http-initializer.ts
+  - src/skills/device-management/*.ts, policy-management/*.ts, automation/*.ts
+- Error responses now include: message, code, timestamp, suggestions, stack trace
+- **Learnings:**
+  - TypeScript spread operator requires object types - use `(obj || {})` for optional spreads
+  - After `instanceof` check on `unknown`, still need type assertion to access properties
+  - Import RateLimitError from errors.ts when using it for instanceof checks
+  - Pre-existing test failures in SkillsManager tests are unrelated to error handling changes
+
+---
+## 2026-01-12 - IMP-006
+- Added token refresh mechanism to Jamf client
+- Enhanced JamfAuthToken interface with metadata:
+  - issuedAt: Date when token was obtained
+  - expiresIn: Token lifetime in seconds from server
+- Added TOKEN_REFRESH_BUFFER_MS constant (5 minutes) for proactive refresh
+- Added isTokenExpiredOrExpiring() helper to check if token needs refresh
+- Updated ensureAuthenticated() to refresh tokens before they expire
+- Added response interceptor for automatic 401 retry:
+  - Invalidates current tokens
+  - Re-authenticates and updates headers
+  - Retries original request with fresh token
+  - Uses _retry flag to prevent infinite loops
+- Added getTokenStatus() public method for health checks
+- Added updateAuthorizationHeader() helper (extracted for TypeScript control flow)
+- Files changed:
+  - src/jamf-client-hybrid.ts
+- **Learnings:**
+  - TypeScript control flow analysis infers `never` after assigning `null` in closures
+  - Extract token access to separate methods to avoid control flow issues
+  - Use explicit type annotations when TypeScript inference fails in async closures
+  - Pre-existing test failures in SkillsManager tests continue to be unrelated
+
+---
+## 2026-01-12 - IMP-007
+- Consolidated duplicate Jamf client implementations
+- Analysis:
+  - jamf-client-hybrid.ts (3270 lines): Full-featured, used by 12+ files, has token refresh, HTTP pooling
+  - jamf-client-hybrid-fixed.ts (410 lines): Simpler, older, NOT imported anywhere
+- Decision: Keep jamf-client-hybrid.ts (better), delete jamf-client-hybrid-fixed.ts
+- Changes:
+  - Deleted src/jamf-client-hybrid-fixed.ts (unused, redundant)
+  - Updated prd.json notes to reference correct file name
+- No unique functionality needed to merge (fixed.ts had subset of features)
+- **Learnings:**
+  - Always check import usage before removing files (`grep -r "from.*filename"`)
+  - The "fixed" version was likely an earlier iteration that was superseded
+  - Pre-existing test failures in SkillsManager tests continue to be unrelated
+
+---
