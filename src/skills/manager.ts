@@ -342,6 +342,23 @@ export class SkillsManager {
   }
 
   /**
+   * Get manager status for health checks
+   */
+  getStatus(): {
+    initialized: boolean;
+    skillCount: number;
+    registeredSkills: string[];
+    contextAvailable: boolean;
+  } {
+    return {
+      initialized: this._context !== null,
+      skillCount: this.skills.size,
+      registeredSkills: Array.from(this.skills.keys()),
+      contextAvailable: this._context !== null,
+    };
+  }
+
+  /**
    * Get skill catalog for discovery
    */
   getSkillCatalog(): any[] {

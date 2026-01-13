@@ -7,6 +7,7 @@ import { JamfApiClientHybrid } from '../jamf-client-hybrid.js';
 import { createLogger } from './logger.js';
 import { getDefaultAgentPool } from '../utils/http-agent-pool.js';
 import { ShutdownManager } from '../utils/shutdown-manager.js';
+import { SkillsManager } from '../skills/manager.js';
 
 const logger = createLogger('health-check');
 
@@ -25,6 +26,38 @@ export interface HealthChecks {
   connectionPool?: CheckResult;
   shutdown?: CheckResult;
   circuitBreaker?: CheckResult;
+  authentication?: CheckResult;
+  skills?: CheckResult;
+}
+
+/**
+ * Component health status for granular breakdown
+ */
+export interface ComponentHealthStatus {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: string;
+  version: string;
+  uptime: number;
+  components: {
+    jamfApi: ComponentStatus;
+    auth: ComponentStatus;
+    skills: ComponentStatus;
+    cache: ComponentStatus;
+  };
+  summary: {
+    totalComponents: number;
+    healthy: number;
+    degraded: number;
+    unhealthy: number;
+  };
+}
+
+export interface ComponentStatus {
+  name: string;
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  message: string;
+  details?: Record<string, unknown>;
+  lastChecked: string;
 }
 
 export interface CheckResult {
@@ -238,6 +271,173 @@ function checkCircuitBreaker(client: JamfApiClientHybrid | null): CheckResult {
 }
 
 /**
+ * Check authentication status
+ */
+function checkAuthentication(client: JamfApiClientHybrid | null): CheckResult {
+  if (!client) {
+    return {
+      status: 'fail',
+      message: 'Jamf client not initialized',
+      details: { reason: 'no_client' }
+    };
+  }
+
+  const tokenStatus = client.getTokenStatus();
+
+  // Check if we have any valid authentication method
+  const hasBearerToken = tokenStatus.bearerToken?.available ?? false;
+  const hasOAuth2Token = tokenStatus.oauth2Token?.available ?? false;
+  const hasBasicAuth = tokenStatus.hasBasicAuth;
+  const hasOAuth2Credentials = tokenStatus.hasOAuth2;
+
+  const details: Record<string, unknown> = {
+    bearerToken: hasBearerToken ? {
+      available: true,
+      expiresAt: tokenStatus.bearerToken?.expiresAt?.toISOString(),
+      expiresIn: tokenStatus.bearerToken?.expiresIn
+    } : { available: false },
+    oauth2Token: hasOAuth2Token ? {
+      available: true,
+      expiresAt: tokenStatus.oauth2Token?.expiresAt?.toISOString(),
+      expiresIn: tokenStatus.oauth2Token?.expiresIn
+    } : { available: false },
+    hasBasicAuth,
+    hasOAuth2Credentials
+  };
+
+  // If we have active tokens, we're authenticated
+  if (hasBearerToken || hasOAuth2Token) {
+    // Check if token is about to expire (within 5 minutes)
+    const now = Date.now();
+    const bearerExpiresAt = tokenStatus.bearerToken?.expiresAt?.getTime();
+    const oauth2ExpiresAt = tokenStatus.oauth2Token?.expiresAt?.getTime();
+
+    const fiveMinutes = 5 * 60 * 1000;
+    const bearerExpiringSoon = bearerExpiresAt && bearerExpiresAt - now < fiveMinutes;
+    const oauth2ExpiringSoon = oauth2ExpiresAt && oauth2ExpiresAt - now < fiveMinutes;
+
+    if ((hasBearerToken && bearerExpiringSoon) || (hasOAuth2Token && oauth2ExpiringSoon)) {
+      return {
+        status: 'warn',
+        message: 'Authentication token expiring soon',
+        details
+      };
+    }
+
+    return {
+      status: 'pass',
+      message: 'Authenticated with valid token',
+      details
+    };
+  }
+
+  // We have credentials but no active token (may need to authenticate)
+  if (hasBasicAuth || hasOAuth2Credentials) {
+    return {
+      status: 'warn',
+      message: 'Credentials available but not yet authenticated',
+      details
+    };
+  }
+
+  return {
+    status: 'fail',
+    message: 'No authentication configured',
+    details
+  };
+}
+
+/**
+ * Check skills manager status
+ */
+function checkSkillsManager(skillsManager: SkillsManager | null): CheckResult {
+  if (!skillsManager) {
+    return {
+      status: 'warn',
+      message: 'Skills manager not provided',
+      details: { reason: 'not_configured' }
+    };
+  }
+
+  const status = skillsManager.getStatus();
+
+  const details = {
+    initialized: status.initialized,
+    skillCount: status.skillCount,
+    registeredSkills: status.registeredSkills,
+    contextAvailable: status.contextAvailable
+  };
+
+  if (!status.initialized) {
+    return {
+      status: 'warn',
+      message: 'Skills manager not initialized',
+      details
+    };
+  }
+
+  if (status.skillCount === 0) {
+    return {
+      status: 'warn',
+      message: 'No skills registered',
+      details
+    };
+  }
+
+  return {
+    status: 'pass',
+    message: `${status.skillCount} skills registered and ready`,
+    details
+  };
+}
+
+/**
+ * Check cache status (connection pool serves as our cache/connection reuse)
+ */
+function checkCache(): CheckResult {
+  try {
+    const pool = getDefaultAgentPool();
+    const metrics = pool.getMetrics();
+
+    const details = {
+      type: 'connection_pool',
+      active: metrics.active,
+      queued: metrics.queued,
+      connectionReuse: true
+    };
+
+    // Connection pool acts as our HTTP connection cache
+    return {
+      status: 'pass',
+      message: 'Connection pool cache operational',
+      details
+    };
+  } catch (error) {
+    return {
+      status: 'warn',
+      message: 'Cache status unavailable',
+      details: {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    };
+  }
+}
+
+/**
+ * Convert CheckResult status to ComponentStatus status
+ */
+function convertStatus(status: 'pass' | 'fail' | 'warn'): 'healthy' | 'degraded' | 'unhealthy' {
+  switch (status) {
+    case 'pass':
+      return 'healthy';
+    case 'warn':
+      return 'degraded';
+    case 'fail':
+      return 'unhealthy';
+  }
+}
+
+/**
  * Basic health check endpoint
  */
 export async function basicHealthCheck(req: Request, res: Response): Promise<void> {
@@ -376,4 +576,99 @@ export async function readinessProbe(
   }
 
   res.status(200).json({ status: 'ready' });
+}
+
+/**
+ * Component health check endpoint with granular breakdown
+ * Returns detailed status for each component: jamfApi, auth, skills, cache
+ */
+export async function componentHealthCheck(
+  req: Request,
+  res: Response,
+  jamfClient?: JamfApiClientHybrid,
+  skillsManager?: SkillsManager
+): Promise<void> {
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+
+  // Check each component
+  const jamfApiCheck = await checkJamfApi(jamfClient ?? null);
+  const authCheck = checkAuthentication(jamfClient ?? null);
+  const skillsCheck = checkSkillsManager(skillsManager ?? null);
+  const cacheCheck = checkCache();
+
+  // Build component breakdown
+  const components = {
+    jamfApi: {
+      name: 'Jamf Pro API',
+      status: convertStatus(jamfApiCheck.status),
+      message: jamfApiCheck.message ?? 'Unknown',
+      details: jamfApiCheck.details,
+      lastChecked: timestamp
+    },
+    auth: {
+      name: 'Authentication',
+      status: convertStatus(authCheck.status),
+      message: authCheck.message ?? 'Unknown',
+      details: authCheck.details,
+      lastChecked: timestamp
+    },
+    skills: {
+      name: 'Skills Manager',
+      status: convertStatus(skillsCheck.status),
+      message: skillsCheck.message ?? 'Unknown',
+      details: skillsCheck.details,
+      lastChecked: timestamp
+    },
+    cache: {
+      name: 'Connection Pool Cache',
+      status: convertStatus(cacheCheck.status),
+      message: cacheCheck.message ?? 'Unknown',
+      details: cacheCheck.details,
+      lastChecked: timestamp
+    }
+  };
+
+  // Calculate summary
+  const componentStatuses = Object.values(components);
+  const summary = {
+    totalComponents: componentStatuses.length,
+    healthy: componentStatuses.filter(c => c.status === 'healthy').length,
+    degraded: componentStatuses.filter(c => c.status === 'degraded').length,
+    unhealthy: componentStatuses.filter(c => c.status === 'unhealthy').length
+  };
+
+  // Determine overall status
+  let overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+  if (summary.unhealthy > 0) {
+    overallStatus = 'unhealthy';
+  } else if (summary.degraded > 0) {
+    overallStatus = 'degraded';
+  }
+
+  const duration = Date.now() - startTime;
+
+  const health: ComponentHealthStatus = {
+    status: overallStatus,
+    timestamp,
+    version: getVersion(),
+    uptime: process.uptime(),
+    components,
+    summary
+  };
+
+  // Set appropriate status code
+  const statusCode = overallStatus === 'healthy' ? 200 :
+                    overallStatus === 'degraded' ? 200 : 503;
+
+  logger.info('Component health check completed', {
+    status: overallStatus,
+    duration,
+    summary
+  });
+
+  res.status(statusCode).json({
+    ...health,
+    duration
+  });
 }

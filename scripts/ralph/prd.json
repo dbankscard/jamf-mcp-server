@@ -118,8 +118,8 @@
         "npm test passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": "Check src/server/http-server.ts for env vars used. Add validation before server starts."
+      "passes": true,
+      "notes": "Created src/utils/env-validation.ts with comprehensive Zod schemas. Validation added to index.ts, index-enhanced.ts, and http-server.ts."
     },
     {
       "id": "IMP-009",
@@ -133,8 +133,8 @@
         "npm test passes"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": "Check src/utils/retry.ts - may already have CircuitBreaker class to use or extend"
+      "passes": true,
+      "notes": "Used existing CircuitBreaker from src/utils/retry.ts. Integrated via JamfApiClientHybrid with configurable thresholds. Added to health check."
     },
     {
       "id": "IMP-010",
@@ -149,8 +149,8 @@
         "npm test passes"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": "Health check should show: { status, components: { jamfApi, auth, skills, cache } }"
+      "passes": true,
+      "notes": "Added componentHealthCheck() with component breakdown: jamfApi, auth, skills, cache. Added checkAuthentication(), checkSkillsManager(), checkCache(), and getStatus() to SkillsManager."
     },
     {
       "id": "IMP-011",

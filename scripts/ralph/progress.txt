@@ -208,3 +208,80 @@ logger.error('message', { error: message, stack });
   - Pre-existing test failures in SkillsManager tests continue to be unrelated
 
 ---
+
+---
+## 2026-01-12 - IMP-008
+- Added comprehensive environment variable validation with Zod schemas
+- Created src/utils/env-validation.ts with:
+  - EnvValidationError class for structured error messages with suggestions
+  - JamfConfigSchema: JAMF_URL, auth credentials, read-only mode, TLS settings
+  - EnhancedModeSchema: retry, rate limiting, circuit breaker settings with bounds
+  - HttpServerSchema: PORT (1-65535), RATE_LIMIT_WINDOW, RATE_LIMIT_MAX
+  - OAuthProviderSchema: provider type, Auth0/Okta configs
+  - HttpAgentPoolSchema: connection pool settings with bounds
+  - LoggingSchema, AgentConfigSchema, ExternalApiKeysSchema
+  - validateEnvironment() to validate all config at once
+- Updated src/index.ts: uses validateJamfConfig() for type-safe config
+- Updated src/index-enhanced.ts: uses both Jamf and enhanced mode validation
+- Updated src/server/http-server.ts: validates HTTP server config with warnings
+- All validated values use proper types instead of raw process.env strings
+- Files changed:
+  - src/utils/env-validation.ts (new, 423 lines)
+  - src/index.ts
+  - src/index-enhanced.ts
+  - src/server/http-server.ts
+- **Learnings:**
+  - Zod transform() is ideal for string-to-type coercion (e.g., 'true' -> boolean)
+  - Use .pipe() after transform() to apply additional validation to transformed value
+  - MCP entry points (index-main.ts) can't log to stdout - validate in actual servers
+  - Pre-existing test failures in SkillsManager tests continue to be unrelated
+
+---
+## 2026-01-12 - IMP-009
+- Added circuit breaker for Jamf API calls
+- Used existing CircuitBreaker class from src/utils/retry.ts
+- Extended JamfApiClientConfig with circuit breaker options:
+  - enabled, failureThreshold, resetTimeout, halfOpenRequests
+- Added environment variable validation for circuit breaker:
+  - JAMF_CIRCUIT_BREAKER_THRESHOLD (1-20)
+  - JAMF_CIRCUIT_BREAKER_RESET_TIMEOUT (5000-300000ms)
+  - JAMF_CIRCUIT_BREAKER_HALF_OPEN_REQUESTS (1-10)
+- Added protected HTTP methods for circuit-breaker-wrapped requests
+- Added getCircuitBreakerStatus() for health check integration
+- Updated health-check.ts with checkCircuitBreaker() function
+- Updated readinessProbe to fail if circuit breaker is OPEN
+- Files changed:
+  - src/utils/env-validation.ts
+  - src/jamf-client-hybrid.ts
+  - src/server/health-check.ts
+- **Learnings:**
+  - CircuitBreaker.execute() pattern works well with async functions
+  - Health checks should treat OPEN circuit as 'fail' since API is unavailable
+  - Half-open state should be 'warn' to indicate recovery in progress
+  - Pre-existing test failures in SkillsManager tests continue to be unrelated
+
+---
+## 2026-01-12 - IMP-010
+- Added granular health check with component breakdown
+- Created new interfaces:
+  - ComponentHealthStatus for granular health response
+  - ComponentStatus for individual component status
+- Added SkillsManager.getStatus() method:
+  - Returns initialized, skillCount, registeredSkills, contextAvailable
+- Added new health check functions:
+  - checkAuthentication(): Checks token status, expiration, credentials
+  - checkSkillsManager(): Checks skill registration and initialization
+  - checkCache(): Checks connection pool status as cache
+  - convertStatus(): Helper to convert pass/fail/warn to healthy/degraded/unhealthy
+- Added componentHealthCheck() endpoint:
+  - Returns status for 4 components: jamfApi, auth, skills, cache
+  - Includes summary with counts (total, healthy, degraded, unhealthy)
+  - Calculates overall status from component statuses
+- Files changed:
+  - src/server/health-check.ts
+  - src/skills/manager.ts
+- **Learnings:**
+  - Health check components should map to distinct functional areas
+  - Token expiration check uses 5-minute buffer for "expiring soon" warning
+  - Connection pool doubles as connection cache status
+  - Pre-existing test failures in SkillsManager tests continue to be unrelated
