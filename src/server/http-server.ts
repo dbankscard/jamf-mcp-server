@@ -15,23 +15,42 @@ import rateLimit from 'express-rate-limit';
 import { registerShutdownHandler } from '../utils/shutdown-manager.js';
 import { basicHealthCheck, detailedHealthCheck, livenessProbe, readinessProbe } from './health-check.js';
 import { createLogger } from './logger.js';
-import { 
-  validateSecurityHeaders, 
-  validateOAuthAuthorize, 
-  validateOAuthCallback, 
+import {
+  validateSecurityHeaders,
+  validateOAuthAuthorize,
+  validateOAuthCallback,
   validateTokenRefresh,
-  requestIdMiddleware 
+  requestIdMiddleware
 } from './validation-middleware.js';
 import path from 'path';
 import { SkillsManager } from '../skills/manager.js';
 import { createSkillsRouter, chatGPTOptimizationMiddleware } from './skills-endpoints.js';
 import { integrateSkillsWithTools, getSkillTools } from '../tools/skills-integration.js';
 import { initializeSkillsForHttp } from '../skills/http-initializer.js';
+import { validateEnvironment } from '../utils/env-validation.js';
 
 // Load environment variables
 dotenv.config();
 
 const logger = createLogger('http-server');
+
+// Validate environment variables on startup
+const envValidation = validateEnvironment(process.env, {
+  validateHttpServer: true,
+  enhancedMode: false,
+});
+
+if (!envValidation.valid) {
+  logger.error('Environment validation failed:');
+  logger.error(envValidation.error?.format() || 'Unknown validation error');
+  process.exit(1);
+}
+
+// Log any warnings
+for (const warning of envValidation.warnings) {
+  logger.warn(`Environment warning: ${warning}`);
+}
+
 const app = express();
 const port = parseInt(process.env.PORT || '3000', 10);
 
@@ -469,25 +488,13 @@ app.get('/mcp/v1', (_req: Request, res: Response) => {
 });
 
 // Validate environment configuration on startup
+// Note: Primary validation happens at module load via validateEnvironment()
+// This function provides additional runtime checks
 const validateConfig = () => {
-  const required = ['JAMF_URL'];
-  const missing = required.filter(key => !process.env[key]);
-  
-  if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
-  }
-
-  // Check for at least one auth method
-  const hasOAuth2 = !!(process.env.JAMF_CLIENT_ID && process.env.JAMF_CLIENT_SECRET);
-  const hasBasicAuth = !!(process.env.JAMF_USERNAME && process.env.JAMF_PASSWORD);
-  
-  if (!hasOAuth2 && !hasBasicAuth) {
-    throw new Error('Missing Jamf authentication credentials. Provide either OAuth2 or Basic Auth.');
-  }
-
-  // Validate OAuth provider configuration
-  if (!['dev', 'auth0', 'okta'].includes(process.env.OAUTH_PROVIDER || 'auth0')) {
-    throw new Error('Invalid OAUTH_PROVIDER. Must be one of: dev, auth0, okta');
+  // Environment was already validated at module load
+  // This check is a safety net for runtime issues
+  if (!envValidation.valid) {
+    throw new Error(envValidation.error?.format() || 'Environment validation failed');
   }
 };
 

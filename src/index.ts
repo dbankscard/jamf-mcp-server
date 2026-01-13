@@ -12,33 +12,29 @@ import { createLogger } from './server/logger.js';
 import { registerShutdownHandler, registerCommonHandlers } from './utils/shutdown-manager.js';
 import { cleanupAuthMiddleware } from './server/auth-middleware.js';
 import { cleanupAgentPool } from './utils/http-agent-pool.js';
+import { validateJamfConfig } from './utils/env-validation.js';
 
 const logger = createLogger('main');
 
-// Environment variables
-const JAMF_URL = process.env.JAMF_URL;
-const JAMF_CLIENT_ID = process.env.JAMF_CLIENT_ID;
-const JAMF_CLIENT_SECRET = process.env.JAMF_CLIENT_SECRET;
-const JAMF_USERNAME = process.env.JAMF_USERNAME;
-const JAMF_PASSWORD = process.env.JAMF_PASSWORD;
-const READ_ONLY_MODE = process.env.JAMF_READ_ONLY === 'true';
-
-// Validate configuration
-if (!JAMF_URL) {
-  logger.error('Missing required environment variable: JAMF_URL');
+// Validate environment variables using Zod schema
+const configResult = validateJamfConfig(process.env);
+if (!configResult.valid) {
+  logger.error('Environment validation failed:');
+  logger.error(configResult.error?.format() || 'Unknown validation error');
   process.exit(1);
 }
+
+const config = configResult.config!;
+const JAMF_URL = config.JAMF_URL;
+const JAMF_CLIENT_ID = config.JAMF_CLIENT_ID;
+const JAMF_CLIENT_SECRET = config.JAMF_CLIENT_SECRET;
+const JAMF_USERNAME = config.JAMF_USERNAME;
+const JAMF_PASSWORD = config.JAMF_PASSWORD;
+const READ_ONLY_MODE = config.JAMF_READ_ONLY ?? false;
 
 // Check for at least one auth method
 const hasOAuth2 = !!(JAMF_CLIENT_ID && JAMF_CLIENT_SECRET);
 const hasBasicAuth = !!(JAMF_USERNAME && JAMF_PASSWORD);
-
-if (!hasOAuth2 && !hasBasicAuth) {
-  logger.error('Missing authentication credentials. Please provide either:');
-  logger.error('  - OAuth2: JAMF_CLIENT_ID and JAMF_CLIENT_SECRET');
-  logger.error('  - Basic Auth: JAMF_USERNAME and JAMF_PASSWORD');
-  process.exit(1);
-}
 
 const server = new Server(
   {
