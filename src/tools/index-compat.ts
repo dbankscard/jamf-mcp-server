@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { DocumentationGenerator } from '../documentation/generator.js';
 import { DocumentationOptions } from '../documentation/types.js';
 import { createLogger } from '../server/logger.js';
+import { buildErrorContext, logErrorWithContext } from '../utils/error-handler.js';
 
 const logger = createLogger('Tools');
 // import { parseJamfDate } from '../jamf-client-classic.js';
@@ -2166,9 +2167,16 @@ export function registerTools(server: Server, jamfClient: any): void {
                 devices.push(device);
               }
             } catch (error) {
+              const errorContext = buildErrorContext(
+                error,
+                `Get device details: ${deviceId}`,
+                'index-compat',
+                { deviceId }
+              );
               errors.push({
                 deviceId,
-                error: error instanceof Error ? error.message : 'Unknown error',
+                error: errorContext.message,
+                code: errorContext.code,
               });
             }
           }
@@ -2232,10 +2240,20 @@ export function registerTools(server: Server, jamfClient: any): void {
                     fullDetails: scriptDetails,
                   };
                 } catch (error) {
-                  logger.error('Failed to fetch script details', { scriptId: script.id, error });
+                  const errorContext = buildErrorContext(
+                    error,
+                    `Fetch script details: ${script.id}`,
+                    'index-compat',
+                    { scriptId: script.id }
+                  );
+                  logger.error('Failed to fetch script details', {
+                    scriptId: script.id,
+                    error: errorContext.message,
+                    code: errorContext.code
+                  });
                   policyDetails.scripts[i] = {
                     ...script,
-                    scriptContentError: `Failed to fetch script content: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    scriptContentError: `Failed to fetch script content: ${errorContext.message}`,
                   };
                 }
               }
@@ -2317,6 +2335,8 @@ export function registerTools(server: Server, jamfClient: any): void {
               };
               return { content: [content] };
             }
+            // Log and re-throw with context
+            logErrorWithContext(error, `Deploy script: ${scriptId}`, 'index-compat', { scriptId, deviceIds });
             throw error;
           }
         }
@@ -3380,10 +3400,15 @@ export function registerTools(server: Server, jamfClient: any): void {
           throw new Error(`Unknown tool: ${name}`);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      const errorContext = logErrorWithContext(
+        error,
+        `Execute tool: ${name}`,
+        'index-compat',
+        { toolName: name, args }
+      );
       const content: TextContent = {
         type: 'text',
-        text: `Error: ${errorMessage}`,
+        text: `Error: ${errorContext.message}${errorContext.suggestions ? ` (${errorContext.suggestions[0]})` : ''}`,
       };
       return { content: [content], isError: true };
     }

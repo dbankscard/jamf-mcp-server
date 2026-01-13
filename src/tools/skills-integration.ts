@@ -14,6 +14,7 @@ import { SkillsManager } from '../skills/manager.js';
 import { SkillContext } from '../skills/types.js';
 import { JamfApiClientHybrid } from '../jamf-client-hybrid.js';
 import { createLogger } from '../server/logger.js';
+import { logErrorWithContext, buildErrorContext } from '../utils/error-handler.js';
 
 const skillLogger = createLogger('Skills');
 
@@ -111,12 +112,17 @@ export function integrateSkillsWithTools(
           ]
         };
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
+        const errorContext = logErrorWithContext(
+          error,
+          `Execute skill: ${skillName}`,
+          'skills-integration',
+          { skillName, args }
+        );
         return {
           content: [
             {
               type: 'text',
-              text: `Skill execution failed: ${message}`
+              text: `Skill execution failed: ${errorContext.message}${errorContext.suggestions ? ` (${errorContext.suggestions[0]})` : ''}`
             } as TextContent
           ],
           isError: true

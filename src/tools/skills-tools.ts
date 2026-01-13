@@ -6,6 +6,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, Tool, TextContent } from '@modelcontextprotocol/sdk/types.js';
 import { SkillsManager } from '../skills/manager.js';
+import { logErrorWithContext } from '../utils/error-handler.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function registerSkillTools(server: Server & { handleToolCall?: any }, skillsManager: SkillsManager): void {
@@ -35,12 +36,17 @@ export function registerSkillTools(server: Server & { handleToolCall?: any }, sk
           ]
         };
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
+        const errorContext = logErrorWithContext(
+          error,
+          `Execute skill: ${skillName}`,
+          'skills-tools',
+          { skillName, args }
+        );
         return {
           content: [
             {
               type: 'text',
-              text: `Skill execution failed: ${message}`
+              text: `Skill execution failed: ${errorContext.message}${errorContext.suggestions ? ` (${errorContext.suggestions[0]})` : ''}`
             } as TextContent
           ],
           isError: true

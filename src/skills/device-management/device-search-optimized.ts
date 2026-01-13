@@ -4,6 +4,7 @@
  */
 
 import { SkillContext, SkillResult } from '../types.js';
+import { buildErrorContext } from '../../utils/error-handler.js';
 
 interface DeviceSearchParams {
   query: string;
@@ -245,11 +246,20 @@ export async function deviceSearchOptimized(
       }
     };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const errorContext = buildErrorContext(
+      error,
+      'Device search',
+      'device-search-optimized',
+      { query: params.query, searchType: params.searchType }
+    );
     return {
       success: false,
-      message: `Device search failed: ${message}`,
-      error: error instanceof Error ? error : new Error(message)
+      message: `Device search failed: ${errorContext.message}${errorContext.suggestions ? ` (${errorContext.suggestions[0]})` : ''}`,
+      error: error instanceof Error ? error : new Error(errorContext.message),
+      data: {
+        errorCode: errorContext.code,
+        timestamp: errorContext.timestamp,
+      }
     };
   }
 }

@@ -6,6 +6,7 @@
  */
 
 import { SkillContext, SkillResult } from '../types.js';
+import { buildErrorContext } from '../../utils/error-handler.js';
 
 interface BatchInventoryUpdateParams {
   deviceIdentifiers: string[];
@@ -49,10 +50,15 @@ export async function batchInventoryUpdate(
             });
           }
         } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : String(error);
+          const errorContext = buildErrorContext(
+            error,
+            `Search device: ${identifier}`,
+            'batch-inventory-update',
+            { identifier, identifierType: params.identifierType }
+          );
           results.failed.push({
             device: identifier,
-            error: `Search failed: ${message}`
+            error: `Search failed: ${errorContext.message}`
           });
         }
       }
@@ -69,10 +75,15 @@ export async function batchInventoryUpdate(
           await context.callTool('updateInventory', { deviceId });
           results.successful.push(deviceId);
         } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : String(error);
+          const errorContext = buildErrorContext(
+            error,
+            `Update inventory: ${deviceId}`,
+            'batch-inventory-update',
+            { deviceId }
+          );
           results.failed.push({
             device: deviceId,
-            error: message
+            error: errorContext.message
           });
         }
       });
@@ -107,11 +118,20 @@ export async function batchInventoryUpdate(
       data: results
     };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const errorContext = buildErrorContext(
+      error,
+      'Batch inventory update',
+      'batch-inventory-update',
+      { deviceCount: params.deviceIdentifiers.length, identifierType: params.identifierType }
+    );
     return {
       success: false,
-      message: `Batch update failed: ${message}`,
-      error: error instanceof Error ? error : new Error(message)
+      message: `Batch update failed: ${errorContext.message}${errorContext.suggestions ? ` (${errorContext.suggestions[0]})` : ''}`,
+      error: error instanceof Error ? error : new Error(errorContext.message),
+      data: {
+        errorCode: errorContext.code,
+        timestamp: errorContext.timestamp,
+      }
     };
   }
 }

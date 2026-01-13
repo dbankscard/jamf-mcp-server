@@ -6,6 +6,7 @@
  */
 
 import { SkillContext, SkillResult, SkillMetadata } from '../types.js';
+import { buildErrorContext } from '../../utils/error-handler.js';
 
 /** Profile search result from the compliance check */
 interface MissingProfileEntry {
@@ -271,11 +272,20 @@ export async function scheduledComplianceCheck(
     };
 
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const errorContext = buildErrorContext(
+      error,
+      'Scheduled compliance check',
+      'scheduled-compliance-check',
+      { checks: params.checks, outputFormat: params.outputFormat }
+    );
     return {
       success: false,
-      message: `Compliance check failed: ${message}`,
-      error: error instanceof Error ? error : new Error(message)
+      message: `Compliance check failed: ${errorContext.message}${errorContext.suggestions ? ` (${errorContext.suggestions[0]})` : ''}`,
+      error: error instanceof Error ? error : new Error(errorContext.message),
+      data: {
+        errorCode: errorContext.code,
+        timestamp: errorContext.timestamp,
+      }
     };
   }
 }

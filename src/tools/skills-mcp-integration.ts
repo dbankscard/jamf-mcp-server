@@ -24,6 +24,7 @@ import {
   searchConfigurationProfiles
 } from './tool-implementations.js';
 import { createLogger } from '../server/logger.js';
+import { logErrorWithContext, buildErrorContext } from '../utils/error-handler.js';
 
 const skillLogger = createLogger('Skills');
 
@@ -72,8 +73,13 @@ export function registerSkillsAsMCPTools(
 
         return { data: result };
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`Tool execution failed: ${message}`);
+        const errorContext = buildErrorContext(
+          error,
+          `Execute tool: ${toolName}`,
+          'skills-mcp-integration',
+          { toolName, params }
+        );
+        throw new Error(`Tool execution failed: ${errorContext.message}`);
       }
     },
 
@@ -153,12 +159,17 @@ export function registerSkillsAsMCPTools(
           ]
         };
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
+        const errorContext = logErrorWithContext(
+          error,
+          `Execute skill: ${skillName}`,
+          'skills-mcp-integration',
+          { skillName, args }
+        );
         return {
           content: [
             {
               type: 'text',
-              text: `Skill execution failed: ${message}`
+              text: `Skill execution failed: ${errorContext.message}${errorContext.suggestions ? ` (${errorContext.suggestions[0]})` : ''}`
             } as TextContent
           ],
           isError: true

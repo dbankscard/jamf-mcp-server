@@ -7,6 +7,7 @@ import { SkillsManager } from './manager.js';
 import { SkillContext } from './types.js';
 import { JamfApiClientHybrid } from '../jamf-client-hybrid.js';
 import { createLogger } from '../server/logger.js';
+import { buildErrorContext } from '../utils/error-handler.js';
 
 const skillLogger = createLogger('Skills');
 
@@ -63,8 +64,13 @@ export function initializeSkillsForHttp(
         
         return { data: result };
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`Tool execution failed: ${message}`);
+        const errorContext = buildErrorContext(
+          error,
+          `Execute tool: ${toolName}`,
+          'http-initializer',
+          { toolName, params }
+        );
+        throw new Error(`Tool execution failed: ${errorContext.message}`);
       }
     },
     

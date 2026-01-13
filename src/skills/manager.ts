@@ -6,6 +6,7 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { SkillContext, SkillResult, SkillMetadata } from './types.js';
 import { createSkillContext } from './context-provider.js';
+import { buildErrorContext } from '../utils/error-handler.js';
 
 // Import all skills
 import { deviceSearchOptimized as deviceSearch, metadata as deviceSearchMetadata } from './device-management/device-search-optimized.js';
@@ -124,11 +125,20 @@ export class SkillsManager {
     try {
       return await skill.execute(this._context, params);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
+      const errorContext = buildErrorContext(
+        error,
+        `Execute skill: ${name}`,
+        'skills-manager',
+        { skillName: name, params }
+      );
       return {
         success: false,
-        message: `Skill execution failed: ${message}`,
-        error: error instanceof Error ? error : new Error(message)
+        message: `Skill execution failed: ${errorContext.message}${errorContext.suggestions ? ` (${errorContext.suggestions[0]})` : ''}`,
+        error: error instanceof Error ? error : new Error(errorContext.message),
+        data: {
+          errorCode: errorContext.code,
+          timestamp: errorContext.timestamp,
+        }
       };
     }
   }

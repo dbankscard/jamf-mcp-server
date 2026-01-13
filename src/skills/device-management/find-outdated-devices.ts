@@ -6,6 +6,7 @@
  */
 
 import { SkillContext, SkillResult } from '../types.js';
+import { buildErrorContext } from '../../utils/error-handler.js';
 
 interface FindOutdatedDevicesParams {
   daysSinceLastContact: number;
@@ -63,11 +64,20 @@ export async function findOutdatedDevices(
       }
     };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const errorContext = buildErrorContext(
+      error,
+      'Find outdated devices',
+      'find-outdated-devices',
+      { daysSinceLastContact: params.daysSinceLastContact }
+    );
     return {
       success: false,
-      message: `Failed to check device status: ${message}`,
-      error: error instanceof Error ? error : new Error(message)
+      message: `Failed to check device status: ${errorContext.message}${errorContext.suggestions ? ` (${errorContext.suggestions[0]})` : ''}`,
+      error: error instanceof Error ? error : new Error(errorContext.message),
+      data: {
+        errorCode: errorContext.code,
+        timestamp: errorContext.timestamp,
+      }
     };
   }
 }

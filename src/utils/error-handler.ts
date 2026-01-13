@@ -3,7 +3,7 @@
  */
 
 import { createLogger } from '../server/logger.js';
-import { JamfAPIError, NetworkError, AuthenticationError, ValidationError } from './errors.js';
+import { JamfAPIError, NetworkError, AuthenticationError, ValidationError, RateLimitError } from './errors.js';
 import { Request, Response, NextFunction } from 'express';
 
 const logger = createLogger('error-handler');
@@ -240,4 +240,185 @@ export async function executeWithFallback<T>(
       throw primaryError; // Throw original error
     }
   }
+}
+
+/**
+ * Structured error context for capturing full error details
+ */
+export interface ErrorContext {
+  /** The operation that was being performed */
+  operation: string;
+  /** Human-readable error message */
+  message: string;
+  /** Technical error code for programmatic handling */
+  code?: string;
+  /** The component/module where the error occurred */
+  component?: string;
+  /** Original stack trace, preserved through promise chains */
+  stack?: string;
+  /** Additional metadata about the error */
+  metadata?: Record<string, unknown>;
+  /** Suggestions for how to resolve the error */
+  suggestions?: string[];
+  /** Timestamp when the error occurred */
+  timestamp: string;
+}
+
+/**
+ * Structured error response with both user-friendly and technical details
+ */
+export interface StructuredErrorResponse {
+  /** User-friendly error message */
+  userMessage: string;
+  /** Technical error details for debugging */
+  technical: ErrorContext;
+  /** Whether this error is recoverable */
+  recoverable: boolean;
+  /** Suggested retry delay in milliseconds (if recoverable) */
+  retryAfterMs?: number;
+}
+
+/**
+ * Build structured error context from an unknown error
+ * Preserves stack traces through promise chains
+ */
+export function buildErrorContext(
+  error: unknown,
+  operation: string,
+  component?: string,
+  metadata?: Record<string, unknown>
+): ErrorContext {
+  const timestamp = new Date().toISOString();
+
+  if (error instanceof JamfAPIError) {
+    return {
+      operation,
+      message: error.message,
+      code: error.errorCode || 'JAMF_API_ERROR',
+      component,
+      stack: error.stack || error.originalError?.stack,
+      metadata: {
+        ...metadata,
+        statusCode: error.statusCode,
+        originalContext: error.context,
+      },
+      suggestions: error.suggestions,
+      timestamp,
+    };
+  }
+
+  if (error instanceof Error) {
+    // Check for Axios-style errors with response property
+    const axiosError = error as { response?: { status?: number; data?: unknown } };
+    const statusCode = axiosError.response?.status;
+
+    return {
+      operation,
+      message: error.message,
+      code: statusCode ? `HTTP_${statusCode}` : 'ERROR',
+      component,
+      stack: error.stack,
+      metadata: {
+        ...(metadata || {}),
+        ...(statusCode ? { statusCode } : {}),
+        ...(axiosError.response?.data ? { responseData: axiosError.response.data } : {}),
+      },
+      timestamp,
+    };
+  }
+
+  // Handle non-Error thrown values
+  return {
+    operation,
+    message: String(error),
+    code: 'UNKNOWN_ERROR',
+    component,
+    metadata,
+    timestamp,
+  };
+}
+
+/**
+ * Create a structured error response suitable for returning to callers
+ */
+export function createStructuredErrorResponse(
+  error: unknown,
+  operation: string,
+  component?: string,
+  metadata?: Record<string, unknown>
+): StructuredErrorResponse {
+  const context = buildErrorContext(error, operation, component, metadata);
+
+  // Determine if error is recoverable
+  let recoverable = false;
+  let retryAfterMs: number | undefined;
+
+  if (error instanceof NetworkError) {
+    recoverable = true;
+    retryAfterMs = 5000; // 5 seconds for network errors
+  } else if (error instanceof RateLimitError) {
+    recoverable = true;
+    retryAfterMs = (error as RateLimitError).retryAfter * 1000;
+  } else if (error instanceof JamfAPIError && error.statusCode && error.statusCode >= 500) {
+    recoverable = true;
+    retryAfterMs = 10000; // 10 seconds for server errors
+  }
+
+  // Create user-friendly message
+  let userMessage = context.message;
+  if (context.suggestions && context.suggestions.length > 0) {
+    userMessage = `${context.message}. ${context.suggestions[0]}`;
+  }
+
+  return {
+    userMessage,
+    technical: context,
+    recoverable,
+    retryAfterMs,
+  };
+}
+
+/**
+ * Log error with full context
+ * Useful for catch blocks to ensure consistent logging
+ */
+export function logErrorWithContext(
+  error: unknown,
+  operation: string,
+  component?: string,
+  metadata?: Record<string, unknown>
+): ErrorContext {
+  const context = buildErrorContext(error, operation, component, metadata);
+
+  logger.error(`${operation} failed`, {
+    error: context.message,
+    code: context.code,
+    component: context.component,
+    stack: context.stack,
+    metadata: context.metadata,
+    suggestions: context.suggestions,
+  });
+
+  return context;
+}
+
+/**
+ * Wrap an async function to preserve stack traces
+ * Call this at the beginning of async functions to capture the call site
+ */
+export function captureStackTrace(): string {
+  const obj = { stack: '' };
+  Error.captureStackTrace(obj, captureStackTrace);
+  return obj.stack;
+}
+
+/**
+ * Create an error with combined stack traces
+ * Useful when catching in promise chains to preserve the original call site
+ */
+export function combineStacks(error: Error, originalStack: string): Error {
+  if (originalStack) {
+    error.stack = `${error.stack}\n--- Original call site ---\n${originalStack}`;
+  }
+  return error;
 }

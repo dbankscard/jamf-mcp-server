@@ -6,6 +6,7 @@
  */
 
 import { SkillContext, SkillResult } from '../types.js';
+import { buildErrorContext } from '../../utils/error-handler.js';
 
 interface DeployPolicyByCriteriaParams {
   policyIdentifier: string;
@@ -204,11 +205,20 @@ export async function deployPolicyByCriteria(
     };
 
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const errorContext = buildErrorContext(
+      error,
+      'Deploy policy by criteria',
+      'deploy-policy-by-criteria',
+      { policyIdentifier: params.policyIdentifier, identifierType: params.identifierType, criteria: params.criteria }
+    );
     return {
       success: false,
-      message: `Failed to deploy policy: ${message}`,
-      error: error instanceof Error ? error : new Error(message)
+      message: `Failed to deploy policy: ${errorContext.message}${errorContext.suggestions ? ` (${errorContext.suggestions[0]})` : ''}`,
+      error: error instanceof Error ? error : new Error(errorContext.message),
+      data: {
+        errorCode: errorContext.code,
+        timestamp: errorContext.timestamp,
+      }
     };
   }
 }

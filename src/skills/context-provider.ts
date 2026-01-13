@@ -7,6 +7,7 @@ import { SkillContext } from './types.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { createLogger } from '../server/logger.js';
+import { buildErrorContext } from '../utils/error-handler.js';
 
 const skillLogger = createLogger('Skills');
 
@@ -41,8 +42,13 @@ export function createSkillContext(server: JamfMCPServer): SkillContext {
 
         return { error: 'No content in tool response' };
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`Tool execution failed: ${message}`);
+        const errorContext = buildErrorContext(
+          error,
+          `Execute tool: ${toolName}`,
+          'context-provider',
+          { toolName, params }
+        );
+        throw new Error(`Tool execution failed: ${errorContext.message}`);
       }
     },
 
