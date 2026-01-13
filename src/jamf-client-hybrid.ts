@@ -25,7 +25,14 @@ export interface JamfApiClientConfig {
 export interface JamfAuthToken {
   token: string;
   expires: Date;
+  /** Timestamp when the token was issued */
+  issuedAt: Date;
+  /** Token lifetime in seconds as reported by the server */
+  expiresIn: number;
 }
+
+/** Buffer time in milliseconds to refresh token before actual expiration */
+const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes before expiration
 
 // Computer schemas (same as unified client)
 const ComputerSchema = z.object({
@@ -121,7 +128,46 @@ export class JamfApiClientHybrid {
       }
       return config;
     });
-    
+
+    // Add response interceptor to handle 401 errors and re-authenticate
+    this.axiosInstance.interceptors.response.use(
+      (response) => response,
+      async (error: AxiosError) => {
+        const originalRequest = error.config as AxiosError['config'] & { _retry?: boolean };
+
+        // Only retry on 401 and if we haven't already retried
+        if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+          originalRequest._retry = true;
+
+          logger.info('Received 401 Unauthorized, attempting to refresh token...');
+
+          // Invalidate current tokens to force refresh
+          this.bearerTokenAvailable = false;
+          this.oauth2Available = false;
+          this.bearerToken = null;
+          this.oauth2Token = null;
+
+          try {
+            // Re-authenticate
+            await this.ensureAuthenticated();
+
+            // Update Authorization header with fresh token
+            this.updateAuthorizationHeader(originalRequest);
+
+            logger.info('Token refreshed successfully, retrying original request');
+            return this.axiosInstance(originalRequest);
+          } catch (refreshError) {
+            logger.error('Failed to refresh token after 401', {
+              error: refreshError instanceof Error ? refreshError.message : String(refreshError),
+            });
+            return Promise.reject(error);
+          }
+        }
+
+        return Promise.reject(error);
+      }
+    );
+
     // MCP servers must not output to stdout/stderr - commenting out logger
     // logger.info(`Jamf Hybrid Client initialized with:`);
     // logger.info(`  - OAuth2 (Client Credentials): ${this.hasOAuth2 ? 'Available' : 'Not configured'}`);
@@ -133,6 +179,53 @@ export class JamfApiClientHybrid {
    */
   get readOnlyMode(): boolean {
     return this._readOnlyMode;
+  }
+
+  /**
+   * Get token status information for health checks and debugging
+   */
+  getTokenStatus(): {
+    bearerToken: { available: boolean; issuedAt?: Date; expiresAt?: Date; expiresIn?: number } | null;
+    oauth2Token: { available: boolean; issuedAt?: Date; expiresAt?: Date; expiresIn?: number } | null;
+    hasBasicAuth: boolean;
+    hasOAuth2: boolean;
+  } {
+    return {
+      bearerToken: this.bearerToken
+        ? {
+            available: this.bearerTokenAvailable,
+            issuedAt: this.bearerToken.issuedAt,
+            expiresAt: this.bearerToken.expires,
+            expiresIn: this.bearerToken.expiresIn,
+          }
+        : null,
+      oauth2Token: this.oauth2Token
+        ? {
+            available: this.oauth2Available,
+            issuedAt: this.oauth2Token.issuedAt,
+            expiresAt: this.oauth2Token.expires,
+            expiresIn: this.oauth2Token.expiresIn,
+          }
+        : null,
+      hasBasicAuth: this.hasBasicAuth,
+      hasOAuth2: this.hasOAuth2,
+    };
+  }
+
+  /**
+   * Update the Authorization header on a request config with the current token
+   * This is extracted to a separate method to avoid TypeScript control flow issues
+   */
+  private updateAuthorizationHeader(config: { headers?: Record<string, unknown>; url?: string }): void {
+    if (!config.headers) return;
+
+    if (this.bearerTokenAvailable && this.bearerToken) {
+      config.headers['Authorization'] = `Bearer ${this.bearerToken.token}`;
+    } else if (this.oauth2Available && this.oauth2Token) {
+      config.headers['Authorization'] = `Bearer ${this.oauth2Token.token}`;
+    } else if (this.basicAuthHeader && config.url?.includes('/JSSResource/')) {
+      config.headers['Authorization'] = this.basicAuthHeader;
+    }
   }
 
   /**
@@ -159,11 +252,15 @@ export class JamfApiClientHybrid {
         }
       );
 
-      const expiresIn = response.data.expires_in ? response.data.expires_in * 1000 : 20 * 60 * 1000;
-      
+      // Default to 20 minutes if expires_in not provided
+      const expiresInSeconds = response.data.expires_in ?? 20 * 60;
+      const issuedAt = new Date();
+
       this.oauth2Token = {
         token: response.data.access_token,
-        expires: new Date(Date.now() + expiresIn),
+        expires: new Date(issuedAt.getTime() + expiresInSeconds * 1000),
+        issuedAt,
+        expiresIn: expiresInSeconds,
       };
       
       this.oauth2Available = true;
@@ -195,10 +292,15 @@ export class JamfApiClientHybrid {
         }
       );
 
-      // Assume token expires in 30 minutes (Jamf default)
+      // Parse expires from response if available, otherwise default to 30 minutes (Jamf default)
+      const expiresInSeconds = response.data.expires ?? 30 * 60;
+      const issuedAt = new Date();
+
       this.bearerToken = {
         token: response.data.token,
-        expires: new Date(Date.now() + 30 * 60 * 1000),
+        expires: new Date(issuedAt.getTime() + expiresInSeconds * 1000),
+        issuedAt,
+        expiresIn: expiresInSeconds,
       };
       
       this.bearerTokenAvailable = true;
@@ -212,23 +314,42 @@ export class JamfApiClientHybrid {
   }
 
   /**
-   * Ensure we have a valid token
+   * Check if a token is expired or will expire soon (within buffer time)
+   */
+  private isTokenExpiredOrExpiring(token: JamfAuthToken | null): boolean {
+    if (!token) return true;
+    const bufferTime = new Date(Date.now() + TOKEN_REFRESH_BUFFER_MS);
+    return token.expires <= bufferTime;
+  }
+
+  /**
+   * Ensure we have a valid token, refreshing proactively before expiration
    */
   private async ensureAuthenticated(): Promise<void> {
     // Try Bearer token from Basic Auth first (it works on Modern API)
     if (this.hasBasicAuth) {
-      if (!this.bearerToken || this.bearerToken.expires <= new Date()) {
+      if (this.isTokenExpiredOrExpiring(this.bearerToken)) {
+        logger.debug('Bearer token expired or expiring soon, refreshing...', {
+          expires: this.bearerToken?.expires,
+          issuedAt: this.bearerToken?.issuedAt,
+          expiresIn: this.bearerToken?.expiresIn,
+        });
         await this.getBearerTokenWithBasicAuth();
       }
     }
-    
+
     // Try OAuth2 if Bearer token failed
     if (!this.bearerTokenAvailable && this.hasOAuth2) {
-      if (!this.oauth2Token || this.oauth2Token.expires <= new Date()) {
+      if (this.isTokenExpiredOrExpiring(this.oauth2Token)) {
+        logger.debug('OAuth2 token expired or expiring soon, refreshing...', {
+          expires: this.oauth2Token?.expires,
+          issuedAt: this.oauth2Token?.issuedAt,
+          expiresIn: this.oauth2Token?.expiresIn,
+        });
         await this.getOAuth2Token();
       }
     }
-    
+
     // We don't set headers here anymore - the interceptor handles it based on the endpoint
     // Just ensure we have at least one valid auth method
     if (!this.bearerTokenAvailable && !this.oauth2Available && !this.hasBasicAuth) {
