@@ -1,11 +1,45 @@
 /**
  * Tool Implementations
  * Direct tool functions that can be called outside of MCP context
+ * All parameters are validated using Zod schemas before processing
  */
 
 import { JamfApiClientHybrid } from '../jamf-client-hybrid.js';
-import { JamfComputer, JamfComputerDetails, JamfPolicy, JamfScript, JamfConfigurationProfile, JamfPackage } from '../types/jamf-api.js';
-import { SearchParams, PaginationParams } from '../types/common.js';
+import { JamfPolicy } from '../types/jamf-api.js';
+import {
+  validateParams,
+  DeviceSearchParamsSchema,
+  DeviceDetailsParamsSchema,
+  UpdateInventoryParamsSchema,
+  ComplianceCheckParamsSchema,
+  ExecutePolicyParamsSchema,
+  SearchPoliciesParamsSchema,
+  PolicyDetailsParamsSchema,
+  SearchConfigProfilesParamsSchema,
+  DeviceSearchParams,
+  DeviceDetailsParams,
+  UpdateInventoryParams,
+  ComplianceCheckParams,
+  ExecutePolicyParams,
+  SearchPoliciesParams,
+  PolicyDetailsParams,
+  SearchConfigProfilesParams,
+} from './validation-schemas.js';
+
+// Re-export validation types for external use
+export type {
+  DeviceSearchParams,
+  DeviceDetailsParams,
+  UpdateInventoryParams,
+  ComplianceCheckParams,
+  ExecutePolicyParams,
+  SearchPoliciesParams,
+  PolicyDetailsParams,
+  SearchConfigProfilesParams,
+} from './validation-schemas.js';
+
+// Re-export validation utilities
+export { ToolValidationError, validateParams } from './validation-schemas.js';
 
 // Helper function to parse Jamf dates
 const parseJamfDate = (date: string | Date | undefined): Date => {
@@ -14,15 +48,21 @@ const parseJamfDate = (date: string | Date | undefined): Date => {
   return new Date(date);
 };
 
-export interface DeviceSearchParams extends SearchParams {
-  query: string;
-  limit?: number;
+export interface ExecutionResult {
+  deviceId: string;
+  status: string;
+  error?: string;
 }
 
-export async function searchDevices(client: JamfApiClientHybrid, params: DeviceSearchParams) {
-  const { query, limit = 50 } = params;
+/**
+ * Search for devices by name, serial number, IP address, username, etc.
+ */
+export async function searchDevices(client: JamfApiClientHybrid, params: unknown) {
+  const validated = validateParams(DeviceSearchParamsSchema, params);
+  const { query, limit } = validated;
+
   const devices = await client.searchComputers(query);
-  
+
   return {
     devices: devices.slice(0, limit),
     total: devices.length,
@@ -30,75 +70,15 @@ export async function searchDevices(client: JamfApiClientHybrid, params: DeviceS
   };
 }
 
-export interface ComplianceCheckParams {
-  days: number;
-  includeDetails?: boolean;
-  deviceId?: string;
-}
+/**
+ * Get detailed information about a specific device
+ */
+export async function getDeviceDetails(client: JamfApiClientHybrid, params: unknown) {
+  const validated = validateParams(DeviceDetailsParamsSchema, params);
+  const { deviceId } = validated;
 
-export async function checkDeviceCompliance(client: JamfApiClientHybrid, params: ComplianceCheckParams) {
-  const { days, includeDetails = false } = params;
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - days);
-  
-  const allDevices = await client.searchComputers('');
-  const compliantDevices = [];
-  const nonCompliantDevices = [];
-  
-  for (const device of allDevices) {
-    const lastContact = parseJamfDate(device.lastContactTime);
-    if (lastContact >= cutoffDate) {
-      compliantDevices.push(device);
-    } else {
-      nonCompliantDevices.push(device);
-    }
-  }
-  
-  return {
-    totalDevices: allDevices.length,
-    compliant: compliantDevices.length,
-    nonCompliant: nonCompliantDevices.length,
-    complianceRate: allDevices.length > 0 
-      ? ((compliantDevices.length / allDevices.length) * 100).toFixed(2) + '%'
-      : '0%',
-    devices: includeDetails ? nonCompliantDevices.map(d => ({
-      id: d.id,
-      name: d.name,
-      serialNumber: d.serialNumber,
-      lastContactTime: d.lastContactTime,
-      daysSinceContact: Math.floor((Date.now() - parseJamfDate(d.lastContactTime).getTime()) / (1000 * 60 * 60 * 24))
-    })) : undefined
-  };
-}
-
-export interface UpdateInventoryParams {
-  deviceId: string;
-}
-
-export async function updateInventory(client: JamfApiClientHybrid, params: UpdateInventoryParams | Record<string, unknown>) {
-  const { deviceId } = params as UpdateInventoryParams;
-
-  if (client.readOnlyMode) {
-    throw new Error('Cannot update inventory in read-only mode');
-  }
-  
-  await client.updateInventory(deviceId);
-  
-  return {
-    success: true,
-    deviceId,
-    message: 'Inventory update command sent successfully'
-  };
-}
-
-export interface DeviceDetailsParams {
-  deviceId: string;
-}
-
-export async function getDeviceDetails(client: JamfApiClientHybrid, params: DeviceDetailsParams) {
-  const { deviceId } = params;
   const device = await client.getComputerDetails(deviceId);
-  
+
   return {
     device: {
       general: device.general || device.computer?.general,
@@ -111,21 +91,74 @@ export async function getDeviceDetails(client: JamfApiClientHybrid, params: Devi
   };
 }
 
-export interface ExecutePolicyParams {
-  policyId: string;
-  deviceIds: string[];
-  confirm?: boolean;
+/**
+ * Trigger an inventory update for a device
+ */
+export async function updateInventory(client: JamfApiClientHybrid, params: unknown) {
+  const validated = validateParams(UpdateInventoryParamsSchema, params);
+  const { deviceId } = validated;
+
+  if (client.readOnlyMode) {
+    throw new Error('Cannot update inventory in read-only mode');
+  }
+
+  await client.updateInventory(deviceId);
+
+  return {
+    success: true,
+    deviceId,
+    message: 'Inventory update command sent successfully'
+  };
 }
 
-export interface ExecutionResult {
-  deviceId: string;
-  status: string;
-  error?: string;
+/**
+ * Check device compliance based on last contact time
+ */
+export async function checkDeviceCompliance(client: JamfApiClientHybrid, params: unknown) {
+  const validated = validateParams(ComplianceCheckParamsSchema, params);
+  // days and includeDetails always have values due to schema defaults
+  const days = validated.days ?? 30;
+  const includeDetails = validated.includeDetails ?? false;
+
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+
+  const allDevices = await client.searchComputers('');
+  const compliantDevices = [];
+  const nonCompliantDevices = [];
+
+  for (const device of allDevices) {
+    const lastContact = parseJamfDate(device.lastContactTime);
+    if (lastContact >= cutoffDate) {
+      compliantDevices.push(device);
+    } else {
+      nonCompliantDevices.push(device);
+    }
+  }
+
+  return {
+    totalDevices: allDevices.length,
+    compliant: compliantDevices.length,
+    nonCompliant: nonCompliantDevices.length,
+    complianceRate: allDevices.length > 0
+      ? ((compliantDevices.length / allDevices.length) * 100).toFixed(2) + '%'
+      : '0%',
+    devices: includeDetails ? nonCompliantDevices.map(d => ({
+      id: d.id,
+      name: d.name,
+      serialNumber: d.serialNumber,
+      lastContactTime: d.lastContactTime,
+      daysSinceContact: Math.floor((Date.now() - parseJamfDate(d.lastContactTime).getTime()) / (1000 * 60 * 60 * 24))
+    })) : undefined
+  };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function executePolicy(client: JamfApiClientHybrid, params: ExecutePolicyParams | any) {
-  const { policyId, deviceIds, confirm = false } = params as ExecutePolicyParams;
+/**
+ * Execute a policy on one or more devices
+ */
+export async function executePolicy(client: JamfApiClientHybrid, params: unknown) {
+  const validated = validateParams(ExecutePolicyParamsSchema, params);
+  const { policyId, deviceIds, confirm } = validated;
 
   if (!confirm) {
     throw new Error('Policy execution requires confirmation. Set confirm: true to proceed.');
@@ -145,7 +178,7 @@ export async function executePolicy(client: JamfApiClientHybrid, params: Execute
       results.push({ deviceId, status: 'failed', error: message });
     }
   }
-  
+
   return {
     policyId,
     executionResults: results,
@@ -157,37 +190,93 @@ export async function executePolicy(client: JamfApiClientHybrid, params: Execute
   };
 }
 
-export async function searchPolicies(client: JamfApiClientHybrid, params: any) {
-  const { query, limit = 50 } = params;
+interface PolicyGeneral {
+  enabled?: boolean;
+  category?: {
+    name?: string;
+  };
+}
+
+/**
+ * Search for policies by name or description
+ */
+export async function searchPolicies(client: JamfApiClientHybrid, params: unknown) {
+  const validated = validateParams(SearchPoliciesParamsSchema, params);
+  const { query, limit } = validated;
+
   const policies = await client.searchPolicies(query);
-  
+
   return {
-    policies: policies.slice(0, limit).map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      enabled: p.general?.enabled,
-      category: p.general?.category?.name || 'Uncategorized',
-      scope: {
-        allComputers: p.scope?.all_computers,
-        computerGroups: p.scope?.computer_groups?.length || 0,
-        computers: p.scope?.computers?.length || 0
-      }
-    })),
+    policies: policies.slice(0, limit).map((p: JamfPolicy) => {
+      const general = p.general as PolicyGeneral | undefined;
+      return {
+        id: p.id,
+        name: p.name,
+        enabled: general?.enabled ?? p.enabled,
+        category: general?.category?.name || p.category || 'Uncategorized',
+        scope: {
+          allComputers: p.scope?.all_computers,
+          computerGroups: p.scope?.computer_group_ids?.length || 0,
+          computers: p.scope?.computer_ids?.length || 0
+        }
+      };
+    }),
     total: policies.length
   };
 }
 
-export async function getPolicyDetails(client: JamfApiClientHybrid, params: any) {
-  const { policyId, includeScriptContent = false } = params;
+interface PolicyScript {
+  id: string | number;
+  name: string;
+  priority?: string | number;
+  parameter4?: string;
+  parameter5?: string;
+  parameter6?: string;
+  parameter7?: string;
+  parameter8?: string;
+  parameter9?: string;
+  parameter10?: string;
+  parameter11?: string;
+}
+
+interface PolicyDetailsResult {
+  policy: {
+    general?: unknown;
+    scope?: unknown;
+    selfService?: unknown;
+    packages?: unknown;
+    scripts?: Array<{
+      id: string | number;
+      name: string;
+      priority?: string | number;
+      parameter4?: string;
+      parameter5?: string;
+      parameter6?: string;
+      parameter7?: string;
+      parameter8?: string;
+      parameter9?: string;
+      parameter10?: string;
+      parameter11?: string;
+    }>;
+  };
+}
+
+/**
+ * Get detailed information about a specific policy
+ */
+export async function getPolicyDetails(client: JamfApiClientHybrid, params: unknown): Promise<PolicyDetailsResult> {
+  const validated = validateParams(PolicyDetailsParamsSchema, params);
+  const { policyId } = validated;
+
   const policy = await client.getPolicyDetails(policyId);
-  
-  const result: any = {
+
+  const result: PolicyDetailsResult = {
     policy: {
       general: policy.policy?.general,
       scope: policy.policy?.scope,
       selfService: policy.policy?.self_service,
       packages: policy.policy?.package_configuration?.packages,
-      scripts: policy.policy?.scripts?.map((s: any) => ({
+      scripts: policy.policy?.scripts?.map((s: PolicyScript) => ({
         id: s.id,
         name: s.name,
         priority: s.priority,
@@ -202,35 +291,60 @@ export async function getPolicyDetails(client: JamfApiClientHybrid, params: any)
       }))
     }
   };
-  
+
   return result;
 }
 
-export async function searchConfigurationProfiles(client: JamfApiClientHybrid, params: any) {
-  const { query, type = 'computer' } = params;
-  
+interface ComputerConfigProfile {
+  id: string | number;
+  name: string;
+  general?: {
+    description?: string;
+    level?: string;
+    distribution_method?: string;
+    payloads?: unknown[] | string;
+  };
+}
+
+interface MobileConfigProfile {
+  id: string | number;
+  name: string;
+  general?: {
+    description?: string;
+    level?: string;
+    payloads?: string;
+  };
+}
+
+/**
+ * Search for configuration profiles by name
+ */
+export async function searchConfigurationProfiles(client: JamfApiClientHybrid, params: unknown) {
+  const validated = validateParams(SearchConfigProfilesParamsSchema, params);
+  const { query, type } = validated;
+
   const profiles = await client.searchConfigurationProfiles(query, type);
-  
+
   if (type === 'computer') {
     return {
-      profiles: profiles.map((p: any) => ({
+      profiles: profiles.map((p: ComputerConfigProfile) => ({
         id: p.id,
         name: p.name,
         description: p.general?.description,
         level: p.general?.level,
         distribution_method: p.general?.distribution_method,
-        payloads: p.general?.payloads?.length || 0
+        payloads: Array.isArray(p.general?.payloads) ? p.general?.payloads.length : 0
       })),
       type
     };
   } else {
     return {
-      profiles: profiles.map((p: any) => ({
+      profiles: profiles.map((p: MobileConfigProfile) => ({
         id: p.id,
         name: p.name,
         description: p.general?.description,
         level: p.general?.level,
-        payloads: p.general?.payloads?.split(',').length || 0
+        payloads: typeof p.general?.payloads === 'string' ? p.general?.payloads.split(',').length : 0
       })),
       type
     };

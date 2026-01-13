@@ -98,3 +98,52 @@ logger.error('message', { error: message, stack });
   - Pre-existing test failures in SkillsManager tests are unrelated to error handling
 
 ---
+## 2026-01-12 - IMP-003
+- Fixed `as any` casts in src/skills/ and src/tools/
+- Key changes:
+  - Added eslint-disable comments for intentional any types in skills/types.ts
+  - Added ToolCallResult type alias for flexible tool return shapes
+  - SkillsManager now has public context setter (was private, needed cast)
+  - JamfApiClientHybrid now has public readOnlyMode getter (was private)
+  - Added proper ComplianceDeviceInfo interface to index-compat.ts
+  - Added ExecutionResult interface to tool-implementations.ts
+- Files changed:
+  - src/skills/types.ts (added eslint-disable, ToolCallResult type)
+  - src/skills/manager.ts (public context setter, executeSkill params)
+  - src/skills/context-provider.ts (type annotations with eslint-disable)
+  - src/skills/http-initializer.ts (removed `as any` cast)
+  - src/skills/automation/scheduled-compliance-check.ts (type imports)
+  - src/jamf-client-hybrid.ts (readOnlyMode getter, renamed private _readOnlyMode)
+  - src/tools/skills-integration.ts (JamfApiClientHybrid type, eslint-disable)
+  - src/tools/skills-mcp-integration.ts (type annotations, eslint-disable)
+  - src/tools/skills-tools.ts (eslint-disable for handleToolCall)
+  - src/tools/tool-implementations.ts (interface exports, readOnlyMode via getter)
+  - src/tools/index-compat.ts (ComplianceDeviceInfo interface)
+- **Learnings:**
+  - Use `// eslint-disable-next-line @typescript-eslint/no-explicit-any` for intentional any
+  - For flexible return types from tools, use type aliases rather than inline any
+  - Private properties can be exposed via getters without breaking existing code
+  - Internal Server __handlers property needs `as any` - no public API for handler access
+  - Pre-existing test failures in SkillsManager tests (expect device-search-optimized, getChatGPTSchema)
+
+---
+## 2026-01-12 - IMP-004
+- Added Zod validation schemas for all tool parameters
+- Created src/tools/validation-schemas.ts with:
+  - ToolValidationError class for structured error messages
+  - ID validators: JamfDeviceIdSchema, JamfPolicyIdSchema, JamfScriptIdSchema, JamfProfileIdSchema, JamfGroupIdSchema
+  - Numeric validators: ComplianceDaysSchema (1-365), LimitSchema (1-1000)
+  - Search validators: SearchQuerySchema (max 500 chars)
+  - Complete tool parameter schemas with proper types
+- Updated src/tools/tool-implementations.ts:
+  - All tool functions now validate params via validateParams()
+  - Removed `any` types - now using `unknown` with validation
+  - Added proper interface types for API responses (PolicyGeneral, PolicyScript, etc.)
+  - Re-exported validation types and ToolValidationError for external use
+- **Learnings:**
+  - Zod .default() on optional fields still infers `T | undefined` - use nullish coalescing at usage site
+  - JamfPolicy has index signature `[key: string]: unknown`, so `general` must be cast to access properties
+  - JamfScope uses `computer_ids` and `computer_group_ids` (not `computers` and `computer_groups`)
+  - Validation schemas should be in a separate file for reusability across the codebase
+
+---
