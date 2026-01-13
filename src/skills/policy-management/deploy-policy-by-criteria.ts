@@ -203,11 +203,12 @@ export async function deployPolicyByCriteria(
       }
     };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       success: false,
-      message: `Failed to deploy policy: ${error.message}`,
-      error
+      message: `Failed to deploy policy: ${message}`,
+      error: error instanceof Error ? error : new Error(message)
     };
   }
 }

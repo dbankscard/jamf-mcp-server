@@ -320,8 +320,9 @@ export class JamfApiClientHybrid {
       
       // Parse XML response
       return this.parseClassicComputerXML(response.data);
-    } catch (error: any) {
-      throw new Error(`Failed to get computer details: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to get computer details: ${message}`);
     }
   }
 

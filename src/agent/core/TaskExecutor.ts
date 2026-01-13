@@ -59,7 +59,7 @@ export class TaskExecutor extends EventEmitter {
       } else {
         await this.executeSequential(steps, results, completedSteps, failedSteps, options);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.emit('planError', { plan, error });
       throw error;
     }
@@ -153,27 +153,28 @@ export class TaskExecutor extends EventEmitter {
       
       this.emit('stepComplete', result);
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - startTime;
+      const message = error instanceof Error ? error.message : String(error);
       const result: StepExecutionResult = {
         stepId: step.id,
         success: false,
-        error: error.message,
+        error: message,
         duration,
       };
 
       this.context.completeTask(taskId, {
         success: false,
-        error: error.message,
+        error: message,
         timestamp: new Date().toISOString(),
       });
 
       this.emit('stepError', { step, error });
-      
+
       if (!options.continueOnError) {
         throw error;
       }
-      
+
       return result;
     }
   }

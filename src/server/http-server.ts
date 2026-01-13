@@ -385,14 +385,15 @@ app.post('/', async (req: Request, res: Response) => {
             ]
           }
         });
-      } catch (error: any) {
-        logger.error('Tool execution error:', error);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error('Tool execution error:', { error: message });
         res.json({
           jsonrpc: '2.0',
           id,
           error: {
             code: -32603,
-            message: error.message || 'Tool execution failed'
+            message: message || 'Tool execution failed'
           }
         });
       }

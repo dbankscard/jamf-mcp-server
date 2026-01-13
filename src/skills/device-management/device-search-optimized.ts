@@ -140,9 +140,10 @@ export async function deviceSearchOptimized(
                 }
               }
             }
-          } catch (error: any) {
-            if (error.message !== 'Timeout') {
-              context.logger?.warn(`Failed to get details for device ${device.id}`, error);
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (message !== 'Timeout') {
+              context.logger?.warn(`Failed to get details for device ${device.id}`, { error: message });
             }
           }
         }
@@ -243,11 +244,12 @@ export async function deviceSearchOptimized(
         searchType
       }
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       success: false,
-      message: `Device search failed: ${error.message}`,
-      error
+      message: `Device search failed: ${message}`,
+      error: error instanceof Error ? error : new Error(message)
     };
   }
 }

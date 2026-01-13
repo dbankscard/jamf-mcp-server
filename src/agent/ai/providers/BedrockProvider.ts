@@ -90,14 +90,16 @@ export class BedrockProvider extends AIProvider {
       
       const responseBody = JSON.parse(new TextDecoder().decode(response.body));
       return this.parseModelResponse(responseBody);
-    } catch (error: any) {
-      if (error.name === 'ResourceNotFoundException') {
+    } catch (error: unknown) {
+      const errorName = (error as { name?: string }).name;
+      const message = error instanceof Error ? error.message : String(error);
+      if (errorName === 'ResourceNotFoundException') {
         throw new Error(`Model ${this.model} not found in region ${this.region}. Check model availability.`);
       }
-      if (error.name === 'AccessDeniedException') {
+      if (errorName === 'AccessDeniedException') {
         throw new Error('Access denied to Bedrock. Check IAM permissions for bedrock:InvokeModel.');
       }
-      throw new Error(`Bedrock API error: ${error.message}`);
+      throw new Error(`Bedrock API error: ${message}`);
     }
   }
 

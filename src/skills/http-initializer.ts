@@ -62,8 +62,9 @@ export function initializeSkillsForHttp(
         }
         
         return { data: result };
-      } catch (error: any) {
-        throw new Error(`Tool execution failed: ${error.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Tool execution failed: ${message}`);
       }
     },
     

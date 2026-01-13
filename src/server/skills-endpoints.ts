@@ -42,12 +42,13 @@ export function createSkillsRouter(skillsManager: SkillsManager): Router {
       };
 
       res.json(response);
-    } catch (error: any) {
-      logger.error('Skill execution error', { error: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('Skill execution error', { error: message });
       res.status(500).json({
         success: false,
         error: 'Internal server error',
-        message: error.message
+        message
       });
     }
   });
@@ -77,8 +78,9 @@ export function createSkillsRouter(skillsManager: SkillsManager): Router {
       };
 
       res.json(response);
-    } catch (error: any) {
-      logger.error('Catalog retrieval error', { error: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('Catalog retrieval error', { error: message });
       res.status(500).json({
         success: false,
         error: 'Failed to retrieve skills catalog'
@@ -106,8 +108,9 @@ export function createSkillsRouter(skillsManager: SkillsManager): Router {
         ...skill.metadata,
         name: skillName // Override with the actual skillName from params
       });
-    } catch (error: any) {
-      logger.error('Skill detail retrieval error', { error: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('Skill detail retrieval error', { error: message });
       res.status(500).json({
         success: false,
         error: 'Failed to retrieve skill details'
@@ -123,8 +126,9 @@ export function createSkillsRouter(skillsManager: SkillsManager): Router {
     try {
       const openApiSpec = skillsManager.generateOpenAPISpec();
       res.json(openApiSpec);
-    } catch (error: any) {
-      logger.error('OpenAPI generation error', { error: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('OpenAPI generation error', { error: message });
       res.status(500).json({
         success: false,
         error: 'Failed to generate OpenAPI specification'

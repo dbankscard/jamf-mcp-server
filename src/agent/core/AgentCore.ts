@@ -197,16 +197,17 @@ export class JamfAgent extends EventEmitter {
       this.emit('task:completed', { taskId, result });
       
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       const result: TaskExecutionResult = {
         success: false,
-        error: error.message,
+        error: message,
       };
 
-      this.context.addAssistantMessage(`Task failed: ${error.message}`);
-      this.auditLogger.logTaskError(taskId, error);
+      this.context.addAssistantMessage(`Task failed: ${message}`);
+      this.auditLogger.logTaskError(taskId, error instanceof Error ? error : new Error(message));
       this.emit('task:failed', { taskId, error });
-      
+
       return result;
     }
   }

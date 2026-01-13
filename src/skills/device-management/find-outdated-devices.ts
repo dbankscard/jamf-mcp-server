@@ -62,11 +62,12 @@ export async function findOutdatedDevices(
         devices: params.includeDetails ? devices : undefined
       }
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       success: false,
-      message: `Failed to check device status: ${error.message}`,
-      error
+      message: `Failed to check device status: ${message}`,
+      error: error instanceof Error ? error : new Error(message)
     };
   }
 }

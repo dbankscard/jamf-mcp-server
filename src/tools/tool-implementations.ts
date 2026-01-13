@@ -123,8 +123,9 @@ export async function executePolicy(client: JamfApiClientHybrid, params: any) {
     try {
       await client.executePolicy(policyId, deviceId);
       results.push({ deviceId, status: 'success' });
-    } catch (error: any) {
-      results.push({ deviceId, status: 'failed', error: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      results.push({ deviceId, status: 'failed', error: message });
     }
   }
   

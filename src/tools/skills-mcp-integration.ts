@@ -67,8 +67,9 @@ export function registerSkillsAsMCPTools(
         }
         
         return { data: result };
-      } catch (error: any) {
-        throw new Error(`Tool execution failed: ${error.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Tool execution failed: ${message}`);
       }
     },
     
@@ -140,12 +141,13 @@ export function registerSkillsAsMCPTools(
             } as TextContent
           ]
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
         return {
           content: [
             {
               type: 'text',
-              text: `Skill execution failed: ${error.message}`
+              text: `Skill execution failed: ${message}`
             } as TextContent
           ],
           isError: true

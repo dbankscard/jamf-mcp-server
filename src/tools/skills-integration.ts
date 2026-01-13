@@ -101,12 +101,13 @@ export function integrateSkillsWithTools(
             } as TextContent
           ]
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
         return {
           content: [
             {
               type: 'text',
-              text: `Skill execution failed: ${error.message}`
+              text: `Skill execution failed: ${message}`
             } as TextContent
           ],
           isError: true

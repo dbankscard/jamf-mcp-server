@@ -1,118 +1,214 @@
 {
-  "branchName": "documentme",
-  "description": "Finalize and merge the documentation feature branch",
+  "branchName": "ralph/improvements",
+  "description": "High priority improvements and missing features for production readiness",
   "userStories": [
     {
-      "id": "DOC-001",
-      "title": "Fix Jest dependency issue",
+      "id": "IMP-001",
+      "title": "Remove all console.log/error/warn calls",
       "acceptanceCriteria": [
-        "Run npm install to fix missing @jridgewell/set-array",
-        "npm test passes without module errors",
-        "npm run typecheck passes"
+        "Remove or replace all console.log with logger in src/",
+        "Remove or replace all console.error with logger.error",
+        "Remove or replace all console.warn with logger.warn",
+        "No console.* calls remain in src/ (except in tests)",
+        "npm run typecheck passes",
+        "npm test passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Jest is failing due to missing dependency. Run npm install to resolve."
+      "notes": "MCP servers must not write to stdout/stderr. Use createLogger() from src/server/logger.ts. Check: src/index.ts, src/jamf-client-hybrid-fixed.ts, src/skills/http-initializer.ts, src/cli/"
     },
     {
-      "id": "DOC-002",
-      "title": "Add unit tests for documentation generator",
+      "id": "IMP-002",
+      "title": "Fix any types in error catch blocks",
       "acceptanceCriteria": [
-        "Create src/__tests__/documentation/generator.test.ts",
-        "Test DocumentationGenerator class methods",
-        "Test error handling for API failures",
-        "npm test passes",
-        "npm run typecheck passes"
+        "Replace all 'catch (error: any)' with proper error handling",
+        "Use type guards from src/utils/type-guards.ts or create new ones",
+        "Replace 'catch (e: any)' patterns similarly",
+        "npm run typecheck passes",
+        "npm test passes"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "New documentation code in src/documentation/ needs test coverage"
+      "notes": "Focus on catch blocks first. Use: if (error instanceof Error) { error.message } else { String(error) }"
     },
     {
-      "id": "DOC-003",
-      "title": "Add unit tests for handbook generator",
+      "id": "IMP-003",
+      "title": "Fix any types in skills and tools",
       "acceptanceCriteria": [
-        "Create src/__tests__/documentation/handbook-generator.test.ts",
-        "Test HandbookGenerator class methods",
-        "Test markdown generation formatting",
-        "npm test passes",
-        "npm run typecheck passes"
+        "Replace 'as any' casts in src/skills/ with proper types",
+        "Replace 'as any' casts in src/tools/ with proper types",
+        "Add proper types to function parameters marked as any",
+        "npm run typecheck passes",
+        "npm test passes"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "The handbook-generator.ts creates the human-readable markdown output"
+      "passes": false,
+      "notes": "Check src/skills/http-initializer.ts, src/tools/skills-integration.ts, src/skills/manager.ts"
     },
     {
-      "id": "DOC-004",
-      "title": "Add unit tests for CLI document-environment",
+      "id": "IMP-004",
+      "title": "Add Zod validation to tool parameters",
       "acceptanceCriteria": [
-        "Create src/__tests__/cli/document-environment.test.ts",
-        "Test CLI argument parsing",
-        "Test configuration validation",
-        "npm test passes",
-        "npm run typecheck passes"
+        "Create Zod schemas for tool parameters in src/tools/tool-implementations.ts",
+        "Validate device IDs, policy IDs format",
+        "Validate numeric ranges (e.g., days parameter)",
+        "Validate search query strings",
+        "Return clear validation error messages",
+        "npm run typecheck passes",
+        "npm test passes"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "CLI tool in src/cli/document-environment.ts needs test coverage"
+      "passes": false,
+      "notes": "Zod is already a dependency. Add schemas before API calls."
     },
     {
-      "id": "DOC-005",
-      "title": "Clean up root status markdown files",
+      "id": "IMP-005",
+      "title": "Improve error handling with full context",
       "acceptanceCriteria": [
-        "Move DOCUMENTATION_STATUS.md to docs/",
-        "Move DOCUMENTATION_FEATURE_COMPLETE.md to docs/",
-        "Remove or consolidate SESSION-SUMMARY.md",
-        "Remove or consolidate CLASSIC_API_FIX.md",
-        "Remove SETUP_ENV.md if content is in other docs",
-        "Root directory has minimal markdown files",
-        "npm run typecheck passes"
+        "Preserve stack traces through promise chains",
+        "Add structured error context to catch blocks in src/tools/",
+        "Add structured error context to catch blocks in src/skills/",
+        "Create error response objects with user-friendly and technical messages",
+        "npm run typecheck passes",
+        "npm test passes"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": "Too many status files in root. Consolidate into docs/ folder."
+      "passes": false,
+      "notes": "Check src/utils/error-handler.ts for patterns. Ensure errors have: message, code, context, stack"
     },
     {
-      "id": "DOC-006",
-      "title": "Update README with documentation feature",
+      "id": "IMP-006",
+      "title": "Add token refresh mechanism to Jamf client",
       "acceptanceCriteria": [
-        "Add Documentation section to README.md",
-        "Include npm run document:env usage examples",
-        "Document the handbook output format",
-        "Link to detailed docs in docs/ folder",
-        "npm run typecheck passes"
+        "Track token expiration time in jamf-client-hybrid.ts",
+        "Check token expiration before requests",
+        "Automatically re-authenticate on 401 responses",
+        "Store token metadata (issued_at, expires_in)",
+        "npm run typecheck passes",
+        "npm test passes"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": "README needs to mention the new documentation capabilities"
+      "passes": false,
+      "notes": "Modify src/jamf-client-hybrid.ts. OAuth tokens typically expire in 30 minutes."
     },
     {
-      "id": "DOC-007",
-      "title": "Commit all documentation feature changes",
+      "id": "IMP-007",
+      "title": "Consolidate duplicate Jamf client implementations",
       "acceptanceCriteria": [
-        "Stage all new and modified files",
-        "Create atomic commits by component",
-        "Use conventional commit format",
-        "All changes committed to documentme branch",
-        "git status shows clean working tree"
+        "Determine which client is better (jamf-client-hybrid.ts vs jamf-client-hybrid-fixed.ts)",
+        "Merge any unique functionality into one file",
+        "Delete the redundant file",
+        "Update all imports",
+        "npm run typecheck passes",
+        "npm test passes"
       ],
       "priority": 7,
-      "passes": true,
-      "notes": "Organize changes into logical commits: core generator, CLI tool, tests, docs"
+      "passes": false,
+      "notes": "Two similar files exist. Keep the better one, remove duplication."
     },
     {
-      "id": "DOC-008",
-      "title": "Create pull request to main",
+      "id": "IMP-008",
+      "title": "Add environment variable validation",
       "acceptanceCriteria": [
-        "Push documentme branch to origin",
-        "Create PR with comprehensive description",
-        "PR summary lists all new features",
-        "PR includes test plan",
-        "PR URL returned"
+        "Create Zod schema for all environment variables",
+        "Validate on startup in src/index-main.ts",
+        "Validate port bounds, rate limit values",
+        "Provide helpful error messages for invalid values",
+        "npm run typecheck passes",
+        "npm test passes"
       ],
       "priority": 8,
       "passes": false,
-      "notes": "Final step - create PR for review"
+      "notes": "Check src/server/http-server.ts for env vars used. Add validation before server starts."
+    },
+    {
+      "id": "IMP-009",
+      "title": "Add circuit breaker for Jamf API calls",
+      "acceptanceCriteria": [
+        "Implement circuit breaker pattern in src/utils/",
+        "Integrate with Jamf client for API calls",
+        "Configure thresholds (failures before open, reset timeout)",
+        "Add circuit state to health check",
+        "npm run typecheck passes",
+        "npm test passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "Check src/utils/retry.ts - may already have CircuitBreaker class to use or extend"
+    },
+    {
+      "id": "IMP-010",
+      "title": "Add granular health check with component breakdown",
+      "acceptanceCriteria": [
+        "Extend src/server/health-check.ts with component status",
+        "Add Jamf API connectivity check",
+        "Add authentication status check",
+        "Add skills manager status",
+        "Return JSON with component breakdown",
+        "npm run typecheck passes",
+        "npm test passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "Health check should show: { status, components: { jamfApi, auth, skills, cache } }"
+    },
+    {
+      "id": "IMP-011",
+      "title": "Create architecture documentation",
+      "acceptanceCriteria": [
+        "Create docs/ARCHITECTURE.md",
+        "Document component diagram (MCP server, skills, tools, resources)",
+        "Document data flow for requests",
+        "Document hybrid client approach and why",
+        "Document skills execution flow"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "High-level overview for new developers. Include ASCII diagrams."
+    },
+    {
+      "id": "IMP-012",
+      "title": "Add tests for retry and circuit breaker utilities",
+      "acceptanceCriteria": [
+        "Create src/__tests__/utils/retry.test.ts",
+        "Test CircuitBreaker state transitions",
+        "Test RetryableCircuitBreaker retry logic",
+        "Test failure thresholds and reset behavior",
+        "npm test passes",
+        "npm run typecheck passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "src/utils/retry.ts has CircuitBreaker class that needs test coverage"
+    },
+    {
+      "id": "IMP-013",
+      "title": "Add tests for HTTP agent pool",
+      "acceptanceCriteria": [
+        "Create src/__tests__/utils/http-agent-pool.test.ts",
+        "Test pool initialization",
+        "Test connection reuse",
+        "Test cleanup/shutdown",
+        "npm test passes",
+        "npm run typecheck passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "src/utils/http-agent-pool.ts manages HTTP connections and needs tests"
+    },
+    {
+      "id": "IMP-014",
+      "title": "Commit all improvements and create PR",
+      "acceptanceCriteria": [
+        "All changes committed with conventional commit format",
+        "Push ralph/improvements branch to origin",
+        "Create PR with comprehensive description",
+        "PR includes summary of all improvements",
+        "PR URL returned"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "Final step - organize commits and create PR for review"
     }
   ]
 }

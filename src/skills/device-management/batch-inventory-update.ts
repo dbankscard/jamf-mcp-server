@@ -48,10 +48,11 @@ export async function batchInventoryUpdate(
               error: 'Device not found'
             });
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
           results.failed.push({
             device: identifier,
-            error: `Search failed: ${error.message}`
+            error: `Search failed: ${message}`
           });
         }
       }
@@ -67,10 +68,11 @@ export async function batchInventoryUpdate(
         try {
           await context.callTool('updateInventory', { deviceId });
           results.successful.push(deviceId);
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
           results.failed.push({
             device: deviceId,
-            error: error.message
+            error: message
           });
         }
       });
@@ -104,11 +106,12 @@ export async function batchInventoryUpdate(
       message: response,
       data: results
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       success: false,
-      message: `Batch update failed: ${error.message}`,
-      error
+      message: `Batch update failed: ${message}`,
+      error: error instanceof Error ? error : new Error(message)
     };
   }
 }

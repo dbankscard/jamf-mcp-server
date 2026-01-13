@@ -385,11 +385,12 @@ export async function deviceSearch(
         ] : ['Try a different search term', 'Check if the device name is correct']
       }
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       success: false,
-      message: `Device search failed: ${error.message}`,
-      error
+      message: `Device search failed: ${message}`,
+      error: error instanceof Error ? error : new Error(message)
     };
   }
 }

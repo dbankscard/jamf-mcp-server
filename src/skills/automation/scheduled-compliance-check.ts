@@ -223,11 +223,12 @@ export async function scheduledComplianceCheck(
       ] : ['Schedule next compliance check']
     };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       success: false,
-      message: `Compliance check failed: ${error.message}`,
-      error
+      message: `Compliance check failed: ${message}`,
+      error: error instanceof Error ? error : new Error(message)
     };
   }
 }
