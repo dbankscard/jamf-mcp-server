@@ -4,13 +4,16 @@
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { 
-  CallToolRequestSchema, 
+import {
+  CallToolRequestSchema,
   ListToolsRequestSchema,
-  Tool, 
-  TextContent 
+  Tool,
+  TextContent
 } from '@modelcontextprotocol/sdk/types.js';
 import { SkillsManager } from '../skills/manager.js';
+import { createLogger } from '../server/logger.js';
+
+const skillLogger = createLogger('Skills');
 
 // Store original handlers
 let originalListToolsHandler: any = null;
@@ -41,14 +44,14 @@ export function integrateSkillsWithTools(
       jamfClientId: process.env.JAMF_CLIENT_ID || '',
     },
     logger: {
-      info: (message: string, meta?: any) => {
-        console.log(`[SKILL INFO] ${message}`, meta || '');
+      info: (message: string, meta?: Record<string, unknown>) => {
+        skillLogger.info(message, meta);
       },
-      warn: (message: string, meta?: any) => {
-        console.warn(`[SKILL WARN] ${message}`, meta || '');
+      warn: (message: string, meta?: Record<string, unknown>) => {
+        skillLogger.warn(message, meta);
       },
-      error: (message: string, meta?: any) => {
-        console.error(`[SKILL ERROR] ${message}`, meta || '');
+      error: (message: string, meta?: Record<string, unknown>) => {
+        skillLogger.error(message, meta);
       }
     },
     jamfClient // Add jamfClient to context for direct access if needed

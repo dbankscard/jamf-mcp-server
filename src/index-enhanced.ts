@@ -18,6 +18,9 @@ import { registerResources } from './resources/index-compat.js';
 import { registerPrompts } from './prompts/index.js';
 import { SkillsManager } from './skills/manager.js';
 import { registerSkillsAsMCPTools } from './tools/skills-mcp-integration.js';
+import { createLogger } from './server/logger.js';
+
+const logger = createLogger('JamfMCPServerEnhanced');
 
 // Environment variables
 const JAMF_URL = process.env.JAMF_URL;
@@ -33,14 +36,14 @@ const DEBUG_MODE = process.env.JAMF_DEBUG_MODE === 'true';
 
 // Validate configuration
 if (!JAMF_URL) {
-  console.error('Missing required environment variable: JAMF_URL');
+  logger.error('Missing required environment variable: JAMF_URL');
   process.exit(1);
 }
 
 // Enhanced mode requires OAuth2
 if (!JAMF_CLIENT_ID || !JAMF_CLIENT_SECRET) {
-  console.error('Enhanced mode requires OAuth2 authentication.');
-  console.error('Please provide JAMF_CLIENT_ID and JAMF_CLIENT_SECRET.');
+  logger.error('Enhanced mode requires OAuth2 authentication.');
+  logger.error('Please provide JAMF_CLIENT_ID and JAMF_CLIENT_SECRET.');
   process.exit(1);
 }
 
@@ -107,15 +110,14 @@ async function run() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
     
-    // console.error('\nJamf MCP server (ENHANCED MODE) started successfully with skills');
-    // console.error('Ready to handle requests with advanced error handling and skills...');
+    // Server started successfully - no logging in MCP servers to avoid breaking JSON-RPC
   } catch (error) {
-    console.error('Failed to initialize enhanced Jamf MCP server:', error);
+    logger.error('Failed to initialize enhanced Jamf MCP server', { error });
     process.exit(1);
   }
 }
 
 run().catch((error) => {
-  console.error('Fatal error:', error);
+  logger.error('Fatal error', { error });
   process.exit(1);
 });

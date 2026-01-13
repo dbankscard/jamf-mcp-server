@@ -3,6 +3,7 @@
 import * as readline from 'readline';
 import { JamfAgent } from '../core/AgentCore.js';
 import { TaskPlan } from '../tasks/TaskPlanner.js';
+import { print, printError } from '../output.js';
 
 export class AgentCLI {
   private agent: JamfAgent;
@@ -68,110 +69,111 @@ export class AgentCLI {
 
   private setupEventHandlers(): void {
     this.agent.on('initialized', () => {
-      console.log('✅ Agent initialized successfully');
+      print('✅ Agent initialized successfully');
     });
 
     this.agent.on('mcp:connected', () => {
-      console.log('🔌 Connected to Jamf MCP server');
+      print('🔌 Connected to Jamf MCP server');
     });
 
     this.agent.on('mcp:disconnected', () => {
-      console.log('🔌 Disconnected from Jamf MCP server');
+      print('🔌 Disconnected from Jamf MCP server');
     });
 
     this.agent.on('task:planCreated', ({ plan }: { plan: TaskPlan }) => {
-      console.log('\n📋 Task Plan Created:');
-      console.log(`Goal: ${plan.goal}`);
-      console.log(`Steps: ${plan.steps.length}`);
+      print('\n📋 Task Plan Created:');
+      print(`Goal: ${plan.goal}`);
+      print(`Steps: ${plan.steps.length}`);
       plan.steps.forEach((step, i) => {
-        console.log(`  ${i + 1}. ${step.description} (${step.toolName})`);
+        print(`  ${i + 1}. ${step.description} (${step.toolName})`);
       });
-      console.log('');
+      print('');
     });
 
     this.agent.on('task:confirmationRequired', ({ plan }: { plan: TaskPlan }) => {
-      console.log('\n⚠️  Confirmation Required:');
-      console.log(`This task will: ${plan.goal}`);
+      print('\n⚠️  Confirmation Required:');
+      print(`This task will: ${plan.goal}`);
       this.rl.question('Do you want to proceed? (yes/no): ', (answer) => {
         const confirmed = answer.toLowerCase().startsWith('y');
         this.agent.confirmTask(confirmed);
         if (!confirmed) {
-          console.log('❌ Task cancelled');
+          print('❌ Task cancelled');
         }
       });
     });
 
     this.agent.on('task:stepStart', ({ step }) => {
-      console.log(`▶️  Starting: ${step.description}`);
+      print(`▶️  Starting: ${step.description}`);
     });
 
-    this.agent.on('task:stepComplete', ({ stepId, success }) => {
-      console.log(`✅ Completed: Step ${stepId}`);
+    this.agent.on('task:stepComplete', ({ stepId }) => {
+      print(`✅ Completed: Step ${stepId}`);
     });
 
     this.agent.on('task:stepError', ({ step, error }) => {
-      console.log(`❌ Failed: ${step.description} - ${error.message}`);
+      print(`❌ Failed: ${step.description} - ${error.message}`);
     });
 
     this.agent.on('task:completed', ({ result }) => {
-      console.log('\n✅ Task Completed Successfully');
+      print('\n✅ Task Completed Successfully');
       if (result.executionResult) {
-        console.log(`  Completed: ${result.executionResult.completedSteps.length} steps`);
-        console.log(`  Failed: ${result.executionResult.failedSteps.length} steps`);
-        console.log(`  Duration: ${result.executionResult.duration}ms`);
+        print(`  Completed: ${result.executionResult.completedSteps.length} steps`);
+        print(`  Failed: ${result.executionResult.failedSteps.length} steps`);
+        print(`  Duration: ${result.executionResult.duration}ms`);
       }
     });
 
     this.agent.on('task:failed', ({ error }) => {
-      console.log(`\n❌ Task Failed: ${error.message}`);
+      print(`\n❌ Task Failed: ${error.message}`);
     });
   }
 
   async start(): Promise<void> {
-    console.log('🤖 Jamf AI Agent CLI');
-    console.log('Type "help" for commands or enter a natural language request\n');
+    print('🤖 Jamf AI Agent CLI');
+    print('Type "help" for commands or enter a natural language request\n');
 
     // Check for required environment variables
-    const missingVars = [];
+    const missingVars: string[] = [];
     if (!process.env.JAMF_URL) missingVars.push('JAMF_URL');
     if (!process.env.JAMF_CLIENT_ID) missingVars.push('JAMF_CLIENT_ID');
     if (!process.env.JAMF_CLIENT_SECRET) missingVars.push('JAMF_CLIENT_SECRET');
-    
+
     if (missingVars.length > 0) {
-      console.log('⚠️  Missing required environment variables:');
-      missingVars.forEach(v => console.log(`   - ${v}`));
-      console.log('\nTo run the agent, set these environment variables:');
-      console.log('export JAMF_URL="https://your-instance.jamfcloud.com"');
-      console.log('export JAMF_CLIENT_ID="your-client-id"');
-      console.log('export JAMF_CLIENT_SECRET="your-client-secret"');
-      
+      print('⚠️  Missing required environment variables:');
+      missingVars.forEach(v => print(`   - ${v}`));
+      print('\nTo run the agent, set these environment variables:');
+      print('export JAMF_URL="https://your-instance.jamfcloud.com"');
+      print('export JAMF_CLIENT_ID="your-client-id"');
+      print('export JAMF_CLIENT_SECRET="your-client-secret"');
+
       if (!process.env.OPENAI_API_KEY && !process.env.AWS_ACCESS_KEY_ID) {
-        console.log('\n📝 Optional: Set AI provider credentials for natural language features:');
-        console.log('\nOption 1 - AWS Bedrock (Claude, Llama):');
-        console.log('export AWS_ACCESS_KEY_ID="your-access-key"');
-        console.log('export AWS_SECRET_ACCESS_KEY="your-secret-key"');
-        console.log('export AWS_REGION="us-east-1"');
-        console.log('\nOption 2 - OpenAI:');
-        console.log('export OPENAI_API_KEY="your-openai-api-key"');
-        console.log('\n(Currently running with mock AI provider)');
+        print('\n📝 Optional: Set AI provider credentials for natural language features:');
+        print('\nOption 1 - AWS Bedrock (Claude, Llama):');
+        print('export AWS_ACCESS_KEY_ID="your-access-key"');
+        print('export AWS_SECRET_ACCESS_KEY="your-secret-key"');
+        print('export AWS_REGION="us-east-1"');
+        print('\nOption 2 - OpenAI:');
+        print('export OPENAI_API_KEY="your-openai-api-key"');
+        print('\n(Currently running with mock AI provider)');
       } else if (process.env.AWS_ACCESS_KEY_ID) {
-        console.log('\n✅ Using AWS Bedrock for AI features');
+        print('\n✅ Using AWS Bedrock for AI features');
       } else if (process.env.OPENAI_API_KEY) {
-        console.log('\n✅ Using OpenAI for AI features');
+        print('\n✅ Using OpenAI for AI features');
       }
-      console.log('');
+      print('');
     }
 
     try {
       await this.agent.initialize();
-    } catch (error: any) {
-      console.error(`\n❌ Failed to initialize agent: ${error.message}`);
-      
-      if (error.message.includes('Connection closed') && missingVars.length > 0) {
-        console.error('\nThe MCP server failed to start due to missing configuration.');
-        console.error('Please set the required environment variables and try again.');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      printError(`\n❌ Failed to initialize agent: ${message}`);
+
+      if (message.includes('Connection closed') && missingVars.length > 0) {
+        printError('\nThe MCP server failed to start due to missing configuration.');
+        printError('Please set the required environment variables and try again.');
       }
-      
+
       process.exit(1);
     }
 
@@ -188,8 +190,9 @@ export class AgentCLI {
 
       try {
         await this.handleCommand(command);
-      } catch (error: any) {
-        console.error(`Error: ${error.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        printError(`Error: ${message}`);
       }
 
       if (this.running) {
@@ -242,7 +245,7 @@ export class AgentCLI {
   }
 
   private showHelp(): void {
-    console.log(`
+    print(`
 Available Commands:
   help      - Show this help message
   status    - Show agent status
@@ -261,7 +264,7 @@ Or enter any natural language request like:
 
   private async showStatus(): Promise<void> {
     const config = this.agent.getConfig();
-    console.log(`
+    print(`
 Agent Status:
   AI Provider: ${config.aiProvider.type}
   AI Model: ${config.aiProvider.model || 'default'}
@@ -273,39 +276,39 @@ Agent Status:
 
   private async listTools(): Promise<void> {
     const tools = await this.agent.getAvailableTools();
-    console.log('\nAvailable Tools:');
-    tools.forEach(tool => console.log(`  - ${tool}`));
+    print('\nAvailable Tools:');
+    tools.forEach(tool => print(`  - ${tool}`));
   }
 
   private async listResources(): Promise<void> {
     const resources = await this.agent.getAvailableResources();
-    console.log('\nAvailable Resources:');
-    resources.forEach(resource => console.log(`  - ${resource}`));
+    print('\nAvailable Resources:');
+    resources.forEach(resource => print(`  - ${resource}`));
   }
 
   private showContext(): void {
     const context = this.agent.getContext();
-    console.log('\n' + context.getContextSummary());
+    print('\n' + context.getContextSummary());
   }
 
   private async executeRequest(request: string): Promise<void> {
-    console.log('\n🤔 Processing your request...\n');
+    print('\n🤔 Processing your request...\n');
     const result = await this.agent.execute(request);
-    
+
     if (!result.success && result.error) {
-      console.log(`\n❌ Error: ${result.error}`);
+      print(`\n❌ Error: ${result.error}`);
     }
   }
 
   private stop(): void {
     this.running = false;
-    console.log('\n👋 Shutting down agent...');
-    
+    print('\n👋 Shutting down agent...');
+
     this.agent.shutdown().then(() => {
-      console.log('Goodbye!');
+      print('Goodbye!');
       process.exit(0);
     }).catch((error) => {
-      console.error('Error during shutdown:', error);
+      printError(`Error during shutdown: ${error}`);
       process.exit(1);
     });
   }
@@ -314,7 +317,7 @@ Agent Status:
 if (import.meta.url === `file://${process.argv[1]}`) {
   const cli = new AgentCLI();
   cli.start().catch((error) => {
-    console.error('Fatal error:', error);
+    printError(`Fatal error: ${error}`);
     process.exit(1);
   });
 }

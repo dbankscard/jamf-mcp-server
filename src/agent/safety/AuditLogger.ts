@@ -2,6 +2,9 @@ import { createWriteStream, WriteStream } from 'fs';
 import { mkdir } from 'fs/promises';
 import { dirname } from 'path';
 import { AgentConfig } from '../core/AgentConfig.js';
+import { createLogger } from '../../server/logger.js';
+
+const logger = createLogger('AuditLogger');
 
 export interface AuditLogEntry {
   timestamp: string;
@@ -33,7 +36,7 @@ export class AuditLogger {
       });
 
       this.stream.on('error', (error) => {
-        console.error('Audit log stream error:', error);
+        logger.error('Audit log stream error', { error });
       });
 
       this.flushInterval = setInterval(() => {
@@ -48,7 +51,7 @@ export class AuditLogger {
         },
       });
     } catch (error) {
-      console.error('Failed to initialize audit logger:', error);
+      logger.error('Failed to initialize audit logger', { error });
     }
   }
 

@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { MCPClient } from '../mcp/MCPClient.js';
 import { AIProvider } from '../ai/AIProvider.js';
 import { AgentConfig } from './AgentConfig.js';
+import { print, printError } from '../output.js';
 
 export class SimpleAgent extends EventEmitter {
   private mcpClient: MCPClient;
@@ -71,38 +72,39 @@ Examples:
     // Execute the tool call if Claude generated one
     if (response.toolCalls && response.toolCalls.length > 0) {
       const toolCall = response.toolCalls[0];
-      
-      console.log(`\n🔧 Calling tool: ${toolCall.name}`);
-      console.log(`📊 Arguments:`, toolCall.arguments);
-      
+
+      print(`\n🔧 Calling tool: ${toolCall.name}`);
+      print(`📊 Arguments: ${JSON.stringify(toolCall.arguments)}`);
+
       try {
         const result = await this.mcpClient.callTool({
           name: toolCall.name,
           arguments: toolCall.arguments
         });
-        
+
         // Display the result
         if (result.content && result.content[0]) {
           const content = result.content[0];
           if (content.type === 'text') {
             try {
               const data = JSON.parse(content.text);
-              console.log('\n📋 Results:');
-              console.log(JSON.stringify(data, null, 2));
+              print('\n📋 Results:');
+              print(JSON.stringify(data, null, 2));
             } catch {
-              console.log('\n📋 Results:');
-              console.log(content.text);
+              print('\n📋 Results:');
+              print(content.text);
             }
           }
         }
-        
+
         return result;
-      } catch (error: any) {
-        console.error(`\n❌ Tool execution failed: ${error.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        printError(`\n❌ Tool execution failed: ${message}`);
         throw error;
       }
     } else {
-      console.log('\n💬 Response:', response.content);
+      print(`\n💬 Response: ${response.content}`);
       return response;
     }
   }

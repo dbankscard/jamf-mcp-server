@@ -7,14 +7,15 @@ import { BedrockProvider } from './ai/providers/BedrockProvider.js';
 import { OpenAIProvider } from './ai/providers/OpenAIProvider.js';
 import { MockProvider } from './ai/providers/MockProvider.js';
 import { SimpleAgent } from './core/SimpleAgent.js';
+import { print, printError } from './output.js';
 
 async function main() {
-  console.log('🤖 Jamf AI Agent - Simple Natural Language Interface\n');
+  print('🤖 Jamf AI Agent - Simple Natural Language Interface\n');
 
   // Check for required environment variables
   if (!process.env.JAMF_URL || !process.env.JAMF_CLIENT_ID || !process.env.JAMF_CLIENT_SECRET) {
-    console.error('❌ Missing required Jamf credentials');
-    console.error('Please set JAMF_URL, JAMF_CLIENT_ID, and JAMF_CLIENT_SECRET');
+    printError('❌ Missing required Jamf credentials');
+    printError('Please set JAMF_URL, JAMF_CLIENT_ID, and JAMF_CLIENT_SECRET');
     process.exit(1);
   }
 
@@ -34,9 +35,9 @@ async function main() {
 
   // Create AI provider
   let aiProvider: AIProvider;
-  
+
   if (process.env.AWS_ACCESS_KEY_ID) {
-    console.log('Using AWS Bedrock (Claude)...');
+    print('Using AWS Bedrock (Claude)...');
     aiProvider = new BedrockProvider({
       awsRegion: process.env.AWS_REGION || 'us-east-1',
       awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -44,13 +45,13 @@ async function main() {
       model: process.env.AGENT_AI_MODEL || 'anthropic.claude-3-sonnet-20240229-v1:0',
     });
   } else if (process.env.OPENAI_API_KEY) {
-    console.log('Using OpenAI...');
+    print('Using OpenAI...');
     aiProvider = new OpenAIProvider({
       apiKey: process.env.OPENAI_API_KEY,
       model: process.env.AGENT_AI_MODEL || 'gpt-3.5-turbo',
     });
   } else {
-    console.log('Using Mock AI provider...');
+    print('Using Mock AI provider...');
     aiProvider = new MockProvider({});
   }
 
@@ -59,14 +60,15 @@ async function main() {
 
   // Set up event handlers
   mcpClient.on('connected', () => {
-    console.log('✅ Connected to Jamf MCP server\n');
+    print('✅ Connected to Jamf MCP server\n');
   });
 
   // Initialize
   try {
     await agent.initialize();
-  } catch (error: any) {
-    console.error('❌ Failed to initialize:', error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    printError(`❌ Failed to initialize: ${message}`);
     process.exit(1);
   }
 
@@ -77,12 +79,12 @@ async function main() {
     prompt: 'jamf> ',
   });
 
-  console.log('Type your requests in natural language. Type "exit" to quit.\n');
+  print('Type your requests in natural language. Type "exit" to quit.\n');
   rl.prompt();
 
   rl.on('line', async (line) => {
     const input = line.trim();
-    
+
     if (!input) {
       rl.prompt();
       return;
@@ -95,16 +97,17 @@ async function main() {
 
     try {
       await agent.processRequest(input);
-    } catch (error: any) {
-      console.error(`❌ Error: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      printError(`❌ Error: ${message}`);
     }
 
-    console.log(''); // Add spacing
+    print(''); // Add spacing
     rl.prompt();
   });
 
   rl.on('close', async () => {
-    console.log('\n👋 Goodbye!');
+    print('\n👋 Goodbye!');
     await agent.shutdown();
     process.exit(0);
   });
@@ -113,7 +116,7 @@ async function main() {
 // Run the CLI
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((error) => {
-    console.error('Fatal error:', error);
+    printError(`Fatal error: ${error}`);
     process.exit(1);
   });
 }

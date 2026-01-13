@@ -4,6 +4,9 @@ import { AgentContext, TaskResult } from './AgentContext.js';
 import { TaskPlan, TaskStep, TaskPlanner } from '../tasks/TaskPlanner.js';
 import { SafetyChecker } from '../safety/SafetyRules.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { createLogger } from '../../server/logger.js';
+
+const logger = createLogger('TaskExecutor');
 
 export interface TaskExecutionOptions {
   dryRun?: boolean;
@@ -142,8 +145,10 @@ export class TaskExecutor extends EventEmitter {
 
       // Log the result for debugging
       if (result.result?.content?.length > 0) {
-        console.log(`\nStep ${step.id} results:`, 
-          JSON.stringify(result.result.content[0], null, 2).substring(0, 500) + '...');
+        logger.debug('Step results', {
+          stepId: step.id,
+          result: JSON.stringify(result.result.content[0], null, 2).substring(0, 500),
+        });
       }
       
       this.emit('stepComplete', result);

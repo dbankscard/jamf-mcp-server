@@ -6,6 +6,9 @@
 import { SkillsManager } from './manager.js';
 import { SkillContext } from './types.js';
 import { JamfApiClientHybrid } from '../jamf-client-hybrid.js';
+import { createLogger } from '../server/logger.js';
+
+const skillLogger = createLogger('Skills');
 
 // Import tool functions directly
 import { 
@@ -70,14 +73,14 @@ export function initializeSkillsForHttp(
     },
     
     logger: {
-      info: (message: string, meta?: any) => {
-        console.log(`[SKILL INFO] ${message}`, meta || '');
+      info: (message: string, meta?: Record<string, unknown>) => {
+        skillLogger.info(message, meta);
       },
-      warn: (message: string, meta?: any) => {
-        console.warn(`[SKILL WARN] ${message}`, meta || '');
+      warn: (message: string, meta?: Record<string, unknown>) => {
+        skillLogger.warn(message, meta);
       },
-      error: (message: string, meta?: any) => {
-        console.error(`[SKILL ERROR] ${message}`, meta || '');
+      error: (message: string, meta?: Record<string, unknown>) => {
+        skillLogger.error(message, meta);
       }
     }
   };

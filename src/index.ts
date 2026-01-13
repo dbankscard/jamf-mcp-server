@@ -25,7 +25,7 @@ const READ_ONLY_MODE = process.env.JAMF_READ_ONLY === 'true';
 
 // Validate configuration
 if (!JAMF_URL) {
-  console.error('Missing required environment variable: JAMF_URL');
+  logger.error('Missing required environment variable: JAMF_URL');
   process.exit(1);
 }
 
@@ -34,9 +34,9 @@ const hasOAuth2 = !!(JAMF_CLIENT_ID && JAMF_CLIENT_SECRET);
 const hasBasicAuth = !!(JAMF_USERNAME && JAMF_PASSWORD);
 
 if (!hasOAuth2 && !hasBasicAuth) {
-  console.error('Missing authentication credentials. Please provide either:');
-  console.error('  - OAuth2: JAMF_CLIENT_ID and JAMF_CLIENT_SECRET');
-  console.error('  - Basic Auth: JAMF_USERNAME and JAMF_PASSWORD');
+  logger.error('Missing authentication credentials. Please provide either:');
+  logger.error('  - OAuth2: JAMF_CLIENT_ID and JAMF_CLIENT_SECRET');
+  logger.error('  - Basic Auth: JAMF_USERNAME and JAMF_PASSWORD');
   process.exit(1);
 }
 

@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { AIProvider, AIMessage } from '../ai/AIProvider.js';
 import { MCPClient } from '../mcp/MCPClient.js';
 import { AgentContext } from '../core/AgentContext.js';
+import { createLogger } from '../../server/logger.js';
+
+const logger = createLogger('TaskPlanner');
 
 export const TaskStepSchema = z.object({
   id: z.string(),
@@ -81,9 +84,12 @@ export class TaskPlanner {
 
     try {
       return TaskPlanSchema.parse(planCall.arguments);
-    } catch (error: any) {
-      console.error('Failed to parse task plan:', error.message);
-      console.error('Raw plan data:', JSON.stringify(planCall.arguments, null, 2));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to parse task plan', {
+        error: message,
+        rawPlanData: planCall.arguments,
+      });
       throw error;
     }
   }

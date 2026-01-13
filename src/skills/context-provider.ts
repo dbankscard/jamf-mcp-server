@@ -6,6 +6,9 @@
 import { SkillContext } from './types.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { createLogger } from '../server/logger.js';
+
+const skillLogger = createLogger('Skills');
 
 interface JamfMCPServer extends Server {
   jamfClient: any;
@@ -45,14 +48,14 @@ export function createSkillContext(server: JamfMCPServer): SkillContext {
     },
     
     logger: {
-      info: (message: string, meta?: any) => {
-        console.log(`[SKILL INFO] ${message}`, meta || '');
+      info: (message: string, meta?: Record<string, unknown>) => {
+        skillLogger.info(message, meta);
       },
-      warn: (message: string, meta?: any) => {
-        console.warn(`[SKILL WARN] ${message}`, meta || '');
+      warn: (message: string, meta?: Record<string, unknown>) => {
+        skillLogger.warn(message, meta);
       },
-      error: (message: string, meta?: any) => {
-        console.error(`[SKILL ERROR] ${message}`, meta || '');
+      error: (message: string, meta?: Record<string, unknown>) => {
+        skillLogger.error(message, meta);
       }
     }
   };

@@ -8,6 +8,9 @@ import { OpenAIProvider } from '../ai/providers/OpenAIProvider.js';
 import { TaskPlanner, TaskPlan } from '../tasks/TaskPlanner.js';
 import { SafetyChecker } from '../safety/SafetyRules.js';
 import { AuditLogger } from '../safety/AuditLogger.js';
+import { createLogger } from '../../server/logger.js';
+
+const logger = createLogger('JamfAgent');
 
 export interface AgentOptions {
   config?: Partial<AgentConfig>;
@@ -86,17 +89,17 @@ export class JamfAgent extends EventEmitter {
 
   private setupEventHandlers(): void {
     this.mcpClient.on('connected', () => {
-      console.log('Connected to MCP server');
+      logger.info('Connected to MCP server');
       this.emit('mcp:connected');
     });
 
     this.mcpClient.on('disconnected', (info) => {
-      console.log('Disconnected from MCP server:', info);
+      logger.info('Disconnected from MCP server', { info });
       this.emit('mcp:disconnected', info);
     });
 
     this.mcpClient.on('error', (error) => {
-      console.error('MCP client error:', error);
+      logger.error('MCP client error', { error });
       this.emit('mcp:error', error);
     });
 
@@ -123,15 +126,15 @@ export class JamfAgent extends EventEmitter {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    console.log('Initializing Jamf Agent...');
-    
+    logger.info('Initializing Jamf Agent...');
+
     // Create AI provider
     this.aiProvider = await this.createAIProvider();
     this.taskPlanner = new TaskPlanner(this.aiProvider, this.mcpClient, this.context);
-    
+
     // Connect to MCP server
     await this.mcpClient.connect();
-    
+
     // Validate AI provider
     const valid = await this.aiProvider.validateConfig();
     if (!valid) {
@@ -139,7 +142,7 @@ export class JamfAgent extends EventEmitter {
     }
 
     this.initialized = true;
-    console.log('Jamf Agent initialized successfully');
+    logger.info('Jamf Agent initialized successfully');
     this.emit('initialized');
   }
 
@@ -235,11 +238,11 @@ export class JamfAgent extends EventEmitter {
   }
 
   async shutdown(): Promise<void> {
-    console.log('Shutting down Jamf Agent...');
-    
+    logger.info('Shutting down Jamf Agent...');
+
     await this.mcpClient.disconnect();
     await this.auditLogger.close();
-    
+
     this.initialized = false;
     this.emit('shutdown');
   }

@@ -4,14 +4,14 @@
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { 
-  CallToolRequestSchema, 
+import {
+  CallToolRequestSchema,
   ListToolsRequestSchema,
-  TextContent 
+  TextContent
 } from '@modelcontextprotocol/sdk/types.js';
 import { SkillsManager } from '../skills/manager.js';
 import { JamfApiClientHybrid } from '../jamf-client-hybrid.js';
-import { 
+import {
   searchDevices,
   checkDeviceCompliance,
   updateInventory,
@@ -21,6 +21,9 @@ import {
   getPolicyDetails,
   searchConfigurationProfiles
 } from './tool-implementations.js';
+import { createLogger } from '../server/logger.js';
+
+const skillLogger = createLogger('Skills');
 
 export function registerSkillsAsMCPTools(
   server: Server, 
@@ -75,14 +78,14 @@ export function registerSkillsAsMCPTools(
     },
     
     logger: {
-      info: (message: string, meta?: any) => {
-        console.error(`[SKILL INFO] ${message}`, meta || '');
+      info: (message: string, meta?: Record<string, unknown>) => {
+        skillLogger.info(message, meta);
       },
-      warn: (message: string, meta?: any) => {
-        console.error(`[SKILL WARN] ${message}`, meta || '');
+      warn: (message: string, meta?: Record<string, unknown>) => {
+        skillLogger.warn(message, meta);
       },
-      error: (message: string, meta?: any) => {
-        console.error(`[SKILL ERROR] ${message}`, meta || '');
+      error: (message: string, meta?: Record<string, unknown>) => {
+        skillLogger.error(message, meta);
       }
     }
   };

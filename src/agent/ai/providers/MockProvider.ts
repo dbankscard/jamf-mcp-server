@@ -1,4 +1,7 @@
 import { AIProvider, AIRequest, AIResponse, AIProviderConfig } from '../AIProvider.js';
+import { createLogger } from '../../../server/logger.js';
+
+const logger = createLogger('MockProvider');
 
 export class MockProvider extends AIProvider {
   constructor(config: AIProviderConfig) {
@@ -6,9 +9,9 @@ export class MockProvider extends AIProvider {
   }
 
   async complete(request: AIRequest): Promise<AIResponse> {
-    console.log('Mock AI Provider - Request:', {
-      messages: request.messages.length,
-      tools: request.tools?.length || 0,
+    logger.debug('Mock AI Provider - Request', {
+      messageCount: request.messages.length,
+      toolCount: request.tools?.length || 0,
     });
 
     // Simulate AI response based on the last user message

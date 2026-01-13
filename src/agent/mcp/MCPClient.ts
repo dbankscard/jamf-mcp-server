@@ -1,14 +1,17 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { 
-  Tool, 
-  Resource, 
+import {
+  Tool,
+  Resource,
   CallToolResult,
   ReadResourceResult,
   ListToolsResult,
   ListResourcesResult,
 } from '@modelcontextprotocol/sdk/types.js';
 import { EventEmitter } from 'events';
+import { createLogger } from '../../server/logger.js';
+
+const logger = createLogger('MCPClient');
 
 export interface MCPConnectionOptions {
   command: string;
@@ -38,8 +41,8 @@ export class MCPClient extends EventEmitter {
     }
 
     try {
-      console.error('Starting MCP server process...');
-      
+      logger.debug('Starting MCP server process...');
+
       // StdioClientTransport expects command and args in its constructor
       this.transport = new StdioClientTransport({
         command: this.options.command,
@@ -59,13 +62,13 @@ export class MCPClient extends EventEmitter {
 
       await this.client.connect(this.transport);
       this.connected = true;
-      
-      console.error('Connected to MCP server');
+
+      logger.debug('Connected to MCP server');
       this.emit('connected');
 
       await this.discoverCapabilities();
     } catch (error) {
-      console.error('Failed to connect to MCP server:', error);
+      logger.error('Failed to connect to MCP server', { error });
       this.disconnect();
       throw error;
     }
@@ -101,15 +104,15 @@ export class MCPClient extends EventEmitter {
       for (const tool of toolsResult.tools) {
         this.tools.set(tool.name, tool);
       }
-      console.error(`Discovered ${this.tools.size} tools`);
+      logger.debug('Discovered tools', { count: this.tools.size });
 
       const resourcesResult = await this.client.listResources();
       for (const resource of resourcesResult.resources) {
         this.resources.set(resource.uri, resource);
       }
-      console.error(`Discovered ${this.resources.size} resources`);
+      logger.debug('Discovered resources', { count: this.resources.size });
     } catch (error) {
-      console.error('Failed to discover capabilities:', error);
+      logger.error('Failed to discover capabilities', { error });
     }
   }
 
@@ -135,17 +138,17 @@ export class MCPClient extends EventEmitter {
       throw new Error(`Unknown tool: ${toolCall.name}`);
     }
 
-    console.error(`Calling tool: ${toolCall.name}`, toolCall.arguments);
-    
+    logger.debug('Calling tool', { toolName: toolCall.name, arguments: toolCall.arguments });
+
     try {
       const result = await this.client.callTool({
         name: toolCall.name,
         arguments: toolCall.arguments,
       });
-      
+
       return result as CallToolResult;
     } catch (error) {
-      console.error(`Tool call failed: ${toolCall.name}`, error);
+      logger.error('Tool call failed', { toolName: toolCall.name, error });
       throw error;
     }
   }
@@ -158,13 +161,13 @@ export class MCPClient extends EventEmitter {
       throw new Error(`Unknown resource: ${uri}`);
     }
 
-    console.error(`Reading resource: ${uri}`);
-    
+    logger.debug('Reading resource', { uri });
+
     try {
       const result = await this.client.readResource({ uri });
       return result as ReadResourceResult;
     } catch (error) {
-      console.error(`Resource read failed: ${uri}`, error);
+      logger.error('Resource read failed', { uri, error });
       throw error;
     }
   }

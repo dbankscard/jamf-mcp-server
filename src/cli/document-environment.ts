@@ -14,6 +14,7 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { createLogger } from '../server/logger.js';
+import { print, printError, printWarn } from './output.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,8 +34,8 @@ interface CLIOptions {
   help?: boolean;
 }
 
-function printUsage() {
-  console.log(`
+function showUsage() {
+  print(`
 Jamf Environment Documentation Tool
 =====================================
 
@@ -118,12 +119,12 @@ function parseArgs(): CLIOptions {
 }
 
 async function main() {
-  console.log('\n🚀 Jamf Environment Documentation Tool\n');
+  print('\n🚀 Jamf Environment Documentation Tool\n');
 
   const options = parseArgs();
 
   if (options.help) {
-    printUsage();
+    showUsage();
     process.exit(0);
   }
 
@@ -132,20 +133,20 @@ async function main() {
   const missing = requiredEnvVars.filter((v) => !process.env[v]);
 
   if (missing.length > 0) {
-    console.error('❌ Error: Missing required environment variables:');
-    missing.forEach((v) => console.error(`   - ${v}`));
-    console.error('\nPlease set these in your .env file or environment.\n');
+    printError('❌ Error: Missing required environment variables:');
+    missing.forEach((v) => printError(`   - ${v}`));
+    printError('\nPlease set these in your .env file or environment.\n');
     process.exit(1);
   }
 
   if (options.aiAnalysis && !process.env.ANTHROPIC_API_KEY) {
-    console.warn('⚠️  Warning: AI analysis requested but ANTHROPIC_API_KEY not set.');
-    console.warn('   Continuing without AI analysis.\n');
+    printWarn('⚠️  Warning: AI analysis requested but ANTHROPIC_API_KEY not set.');
+    printWarn('   Continuing without AI analysis.\n');
     options.aiAnalysis = false;
   }
 
   // Initialize Jamf client
-  console.log('📡 Connecting to Jamf Pro...');
+  print('📡 Connecting to Jamf Pro...');
   const jamfClient = new JamfApiClientHybrid({
     baseUrl: process.env.JAMF_URL!,
     clientId: process.env.JAMF_CLIENT_ID!,
@@ -158,9 +159,9 @@ async function main() {
 
   try {
     await jamfClient.testApiAccess();
-    console.log('✅ Connected to Jamf Pro\n');
+    print('✅ Connected to Jamf Pro\n');
   } catch (error) {
-    console.error('❌ Failed to connect to Jamf Pro:', error);
+    printError(`❌ Failed to connect to Jamf Pro: ${error}`);
     process.exit(1);
   }
 
@@ -183,48 +184,48 @@ async function main() {
     pageSize: options.pageSize || 100,
   };
 
-  console.log('⚙️  Configuration:');
-  console.log(`   Output: ${docOptions.outputPath}`);
-  console.log(`   Detail Level: ${docOptions.detailLevel}`);
-  console.log(`   Formats: ${docOptions.formats?.join(', ') || 'markdown, json'}`);
-  console.log(`   Components: ${docOptions.components?.join(', ') || 'all'}`);
-  console.log(`   AI Analysis: ${docOptions.useAIAnalysis ? 'enabled' : 'disabled'}`);
-  console.log(`   Page Size: ${docOptions.pageSize}\n`);
+  print('⚙️  Configuration:');
+  print(`   Output: ${docOptions.outputPath}`);
+  print(`   Detail Level: ${docOptions.detailLevel}`);
+  print(`   Formats: ${docOptions.formats?.join(', ') || 'markdown, json'}`);
+  print(`   Components: ${docOptions.components?.join(', ') || 'all'}`);
+  print(`   AI Analysis: ${docOptions.useAIAnalysis ? 'enabled' : 'disabled'}`);
+  print(`   Page Size: ${docOptions.pageSize}\n`);
 
   // Generate documentation
-  console.log('📝 Generating documentation...\n');
+  print('📝 Generating documentation...\n');
   const generator = new DocumentationGenerator(jamfClient);
 
   const documentation = await generator.generateDocumentation(docOptions);
   const progress = generator.getProgress();
 
-  console.log('\n✅ Documentation generated successfully!\n');
-  console.log('📊 Summary:');
-  console.log(`   Total Computers: ${documentation.overview.totalComputers}`);
-  console.log(`   Total Mobile Devices: ${documentation.overview.totalMobileDevices}`);
-  console.log(`   Total Policies: ${documentation.overview.totalPolicies}`);
-  console.log(`   Total Profiles: ${documentation.overview.totalConfigurationProfiles}`);
-  console.log(`   Total Scripts: ${documentation.overview.totalScripts}`);
-  console.log(`   Total Packages: ${documentation.overview.totalPackages}`);
-  console.log(`   Components Documented: ${progress.completedComponents.length}`);
+  print('\n✅ Documentation generated successfully!\n');
+  print('📊 Summary:');
+  print(`   Total Computers: ${documentation.overview.totalComputers}`);
+  print(`   Total Mobile Devices: ${documentation.overview.totalMobileDevices}`);
+  print(`   Total Policies: ${documentation.overview.totalPolicies}`);
+  print(`   Total Profiles: ${documentation.overview.totalConfigurationProfiles}`);
+  print(`   Total Scripts: ${documentation.overview.totalScripts}`);
+  print(`   Total Packages: ${documentation.overview.totalPackages}`);
+  print(`   Components Documented: ${progress.completedComponents.length}`);
 
   if (progress.errors.length > 0) {
-    console.log(`\n⚠️  Errors encountered: ${progress.errors.length}`);
-    progress.errors.forEach((err) => console.log(`   - ${err}`));
+    print(`\n⚠️  Errors encountered: ${progress.errors.length}`);
+    progress.errors.forEach((err) => print(`   - ${err}`));
   }
 
-  console.log(`\n📁 Documentation saved to: ${docOptions.outputPath}`);
+  print(`\n📁 Documentation saved to: ${docOptions.outputPath}`);
 
   if (documentation.aiAnalysis) {
-    console.log('\n🤖 AI Analysis completed:');
-    console.log(`   ${documentation.aiAnalysis.environmentAnalysis.summary}`);
+    print('\n🤖 AI Analysis completed:');
+    print(`   ${documentation.aiAnalysis.environmentAnalysis.summary}`);
   }
 
-  console.log('\n✨ Done!\n');
+  print('\n✨ Done!\n');
 }
 
 main().catch((error) => {
-  console.error('\n❌ Fatal error:', error);
+  printError(`\n❌ Fatal error: ${error}`);
   process.exit(1);
 });
 

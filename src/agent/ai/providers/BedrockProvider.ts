@@ -1,9 +1,12 @@
 import { AIProvider, AIRequest, AIResponse, AIToolCall, AIProviderConfig } from '../AIProvider.js';
-import { 
-  BedrockRuntimeClient, 
+import {
+  BedrockRuntimeClient,
   InvokeModelCommand,
-  InvokeModelCommandInput 
+  InvokeModelCommandInput
 } from '@aws-sdk/client-bedrock-runtime';
+import { createLogger } from '../../../server/logger.js';
+
+const logger = createLogger('BedrockProvider');
 
 interface BedrockConfig extends AIProviderConfig {
   awsRegion?: string;
@@ -275,11 +278,11 @@ export class BedrockProvider extends AIProvider {
         messages: [{ role: 'user', content: 'Hi' }],
         maxTokens: 10,
       };
-      
+
       await this.complete(testRequest);
       return true;
     } catch (error) {
-      console.error('Bedrock config validation failed:', error);
+      logger.error('Bedrock config validation failed', { error });
       return false;
     }
   }

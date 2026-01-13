@@ -8,6 +8,9 @@ import {
 import { z } from 'zod';
 import { DocumentationGenerator } from '../documentation/generator.js';
 import { DocumentationOptions } from '../documentation/types.js';
+import { createLogger } from '../server/logger.js';
+
+const logger = createLogger('Tools');
 // import { parseJamfDate } from '../jamf-client-classic.js';
 // Helper function to parse Jamf dates
 const parseJamfDate = (date: string | Date | undefined): Date => {
@@ -2199,7 +2202,7 @@ export function registerTools(server: Server, jamfClient: any): void {
                     fullDetails: scriptDetails,
                   };
                 } catch (error) {
-                  console.error(`Failed to fetch script details for script ${script.id}:`, error);
+                  logger.error('Failed to fetch script details', { scriptId: script.id, error });
                   policyDetails.scripts[i] = {
                     ...script,
                     scriptContentError: `Failed to fetch script content: ${error instanceof Error ? error.message : 'Unknown error'}`,

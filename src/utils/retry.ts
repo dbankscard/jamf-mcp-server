@@ -1,4 +1,7 @@
 import { isRetryableError, getRetryDelay, JamfAPIError, NetworkError } from './errors.js';
+import { createLogger } from '../server/logger.js';
+
+const logger = createLogger('Retry');
 
 export interface RetryOptions {
   maxRetries?: number;
@@ -153,12 +156,12 @@ export async function retryWithBackoff<T>(
       
       // Log retry attempt
       if (config.debugMode || onRetry) {
-        const message = `Retry attempt ${attempt + 1}/${maxRetries} after ${Math.round(delay)}ms`;
         if (config.debugMode) {
-          console.error(`[RETRY] ${message}`, {
-            error: lastError.message,
+          logger.debug('Retry attempt', {
             attempt: attempt + 1,
-            delay: Math.round(delay)
+            maxRetries,
+            delay: Math.round(delay),
+            error: lastError.message,
           });
         }
         onRetry?.(lastError, attempt + 1, delay);

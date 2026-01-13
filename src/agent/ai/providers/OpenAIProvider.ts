@@ -1,5 +1,8 @@
 import { AIProvider, AIRequest, AIResponse, AIToolCall, AIProviderConfig } from '../AIProvider.js';
 import axios, { AxiosInstance } from 'axios';
+import { createLogger } from '../../../server/logger.js';
+
+const logger = createLogger('OpenAIProvider');
 
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant';
@@ -99,7 +102,7 @@ export class OpenAIProvider extends AIProvider {
               arguments: JSON.parse(toolCall.function.arguments),
             });
           } catch (error) {
-            console.error('Failed to parse tool arguments:', error);
+            logger.error('Failed to parse tool arguments', { error });
           }
         }
       }
