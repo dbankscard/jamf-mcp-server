@@ -163,8 +163,8 @@
         "Document skills execution flow"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": "High-level overview for new developers. Include ASCII diagrams."
+      "passes": true,
+      "notes": "Created comprehensive docs/ARCHITECTURE.md with ASCII component diagrams, data flow diagrams, hybrid client explanation, and skills execution flow."
     },
     {
       "id": "IMP-012",
@@ -178,8 +178,8 @@
         "npm run typecheck passes"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": "src/utils/retry.ts has CircuitBreaker class that needs test coverage"
+      "passes": true,
+      "notes": "Created comprehensive test suite with 32 tests covering CircuitBreaker state transitions (CLOSED->OPEN->HALF_OPEN->CLOSED), RetryableCircuitBreaker with per-key breakers, retryWithBackoff with retry conditions, and batchRetryWithBreaker for parallel operations."
     },
     {
       "id": "IMP-013",

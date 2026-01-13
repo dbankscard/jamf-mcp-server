@@ -285,3 +285,57 @@ logger.error('message', { error: message, stack });
   - Token expiration check uses 5-minute buffer for "expiring soon" warning
   - Connection pool doubles as connection cache status
   - Pre-existing test failures in SkillsManager tests continue to be unrelated
+
+---
+## 2026-01-12 - IMP-011
+- Created comprehensive architecture documentation
+- Created docs/ARCHITECTURE.md with:
+  - ASCII component diagrams showing MCP server, tools, skills, resources layers
+  - Data flow diagrams for standard mode (stdio) and HTTP mode
+  - Hybrid client architecture explanation (why both OAuth2 and Basic Auth)
+  - Skills execution flow from AI request to Jamf API
+  - Tool/skill/resource/prompt registration flow
+  - Health check system with component breakdown
+  - Configuration reference (environment variables)
+  - Extension points for adding new tools/skills/resources
+- Files changed:
+  - docs/ARCHITECTURE.md (new, 446 lines)
+- **Learnings:**
+  - Documentation-only changes don't require typecheck/test pass (but verified anyway)
+  - ASCII diagrams work well in markdown for showing component relationships
+  - Pre-existing test failures in SkillsManager tests continue to be unrelated
+
+---
+## 2026-01-12 - IMP-012
+- Added comprehensive test suite for retry and circuit breaker utilities
+- Created src/__tests__/utils/retry.test.ts with 32 tests:
+  - getRetryConfig: default values and environment variable override
+  - CircuitBreaker state transitions:
+    - CLOSED state with success/failure tracking
+    - Transition to OPEN after reaching failure threshold
+    - JamfAPIError with CIRCUIT_OPEN code and wait time suggestions
+    - Transition to HALF_OPEN after reset timeout
+    - Recovery to CLOSED after successful half-open requests
+    - Return to OPEN on failure during half-open
+    - Failure count reset on success
+  - retryWithBackoff:
+    - First-attempt success without retrying
+    - Retry on retryable errors (NetworkError, 5xx, RateLimitError)
+    - No retry on non-retryable errors (validation, 4xx)
+    - Custom retry conditions
+    - onRetry callback invocation
+    - RateLimitError with retry-after delay
+  - RetryableCircuitBreaker:
+    - Separate circuit breakers per key
+    - Retry logic integration
+    - Reset individual and all breakers
+    - Default options fallback
+  - withRetry: function wrapper with argument passthrough
+  - batchRetryWithBreaker: parallel operations with mixed results
+- Files changed:
+  - src/__tests__/utils/retry.test.ts (new, 432 lines)
+- **Learnings:**
+  - ESM mocking with jest.unstable_mockModule has path resolution issues in this project
+  - Tests can avoid mocking by not triggering code paths that require mocked modules
+  - Use afterEach to restore process.env for clean test isolation
+  - Pre-existing test failures in SkillsManager tests continue to be unrelated
