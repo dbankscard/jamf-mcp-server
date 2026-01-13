@@ -339,3 +339,63 @@ logger.error('message', { error: message, stack });
   - Tests can avoid mocking by not triggering code paths that require mocked modules
   - Use afterEach to restore process.env for clean test isolation
   - Pre-existing test failures in SkillsManager tests continue to be unrelated
+
+---
+## 2026-01-12 - IMP-013
+- Added comprehensive test suite for HTTP agent pool
+- Created src/__tests__/utils/http-agent-pool.test.ts with 27 tests:
+  - Singleton pattern:
+    - Same instance on multiple getInstance calls
+    - Instance with default options (maxSockets, maxFreeSockets)
+    - Instance with custom options
+    - Options ignored on subsequent calls
+  - getAgent:
+    - Returns HTTPS agent for https:// URLs
+    - Returns HTTP agent for http:// URLs
+  - Metrics:
+    - Initial metrics with zero values
+    - Returns copy of metrics (not reference)
+    - Metrics interval setup when enabled
+  - Destroy:
+    - Destroys both agents
+    - Clears metrics interval
+  - UpdateConfig:
+    - Creates new instance with updated options
+  - Keep-alive timeout:
+    - Configures timeout on both agents
+  - TLS settings:
+    - Certificate verification enabled by default
+    - Certificate verification can be disabled
+  - getDefaultAgentPool:
+    - Default environment values
+    - Environment variable overrides
+    - JAMF_ALLOW_INSECURE disables cert verification
+    - HTTP_ENABLE_METRICS enables metrics
+  - cleanupAgentPool:
+    - Destroys agent pool
+  - Agent configuration:
+    - Keep-alive enabled
+    - FIFO scheduling
+- Files changed:
+  - src/__tests__/utils/http-agent-pool.test.ts (new, 424 lines)
+- **Learnings:**
+  - Singleton patterns require jest.resetModules() to reset between tests
+  - Access internal agent options via type casting: (agent as unknown as { options: T })
+  - HTTP/HTTPS agents expose maxSockets, maxFreeSockets, keepAlive directly
+  - Scheduling option is stored in options sub-object, not on agent directly
+  - Pre-existing test failures in SkillsManager tests continue to be unrelated
+
+---
+## 2026-01-12 - IMP-014
+- Committed all improvements and created PR
+- Pushed ralph/improvements branch to origin
+- Created PR #7 with comprehensive description
+- PR URL: https://github.com/dbankscard/jamf-mcp-server/pull/7
+- Summary of all 13 improvements included
+- Files changed:
+  - scripts/ralph/prd.json (marked IMP-014 as passes: true)
+  - scripts/ralph/progress.txt (added learnings)
+- **Learnings:**
+  - Use `gh pr create` with HEREDOC for multi-line PR body
+  - Pre-existing test failures should be documented in PR notes
+  - Track final commit with conventional commit format: chore: [ID] - [Title]
