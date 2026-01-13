@@ -24,6 +24,7 @@ export interface HealthChecks {
   jamfApi?: CheckResult;
   connectionPool?: CheckResult;
   shutdown?: CheckResult;
+  circuitBreaker?: CheckResult;
 }
 
 export interface CheckResult {
@@ -185,6 +186,58 @@ function checkShutdown(): CheckResult {
 }
 
 /**
+ * Check circuit breaker status
+ */
+function checkCircuitBreaker(client: JamfApiClientHybrid | null): CheckResult {
+  if (!client) {
+    return {
+      status: 'pass',
+      message: 'Circuit breaker not applicable (no client)',
+      details: { enabled: false }
+    };
+  }
+
+  const cbStatus = client.getCircuitBreakerStatus();
+
+  if (!cbStatus.enabled) {
+    return {
+      status: 'pass',
+      message: 'Circuit breaker disabled',
+      details: { enabled: false }
+    };
+  }
+
+  const details = {
+    enabled: cbStatus.enabled,
+    state: cbStatus.state,
+    failureCount: cbStatus.failureCount,
+    ...cbStatus.config
+  };
+
+  if (cbStatus.state === 'OPEN') {
+    return {
+      status: 'fail',
+      message: 'Circuit breaker is OPEN - Jamf API calls are blocked',
+      details
+    };
+  }
+
+  if (cbStatus.state === 'HALF_OPEN') {
+    return {
+      status: 'warn',
+      message: 'Circuit breaker is HALF_OPEN - testing recovery',
+      details
+    };
+  }
+
+  return {
+    status: 'pass',
+    message: 'Circuit breaker is CLOSED - operating normally',
+    details
+  };
+}
+
+/**
  * Basic health check endpoint
  */
 export async function basicHealthCheck(req: Request, res: Response): Promise<void> {
@@ -240,6 +293,7 @@ export async function detailedHealthCheck(
   // Check Jamf API if client provided
   if (jamfClient) {
     health.checks.jamfApi = await checkJamfApi(jamfClient);
+    health.checks.circuitBreaker = checkCircuitBreaker(jamfClient);
   }
 
   // Determine overall status
@@ -303,9 +357,19 @@ export async function readinessProbe(
   if (jamfClient) {
     const jamfStatus = await checkJamfApi(jamfClient);
     if (jamfStatus.status === 'fail') {
-      res.status(503).json({ 
-        status: 'not ready', 
-        reason: 'jamf api not accessible' 
+      res.status(503).json({
+        status: 'not ready',
+        reason: 'jamf api not accessible'
+      });
+      return;
+    }
+
+    // Check circuit breaker - if OPEN, we're not ready
+    const cbStatus = checkCircuitBreaker(jamfClient);
+    if (cbStatus.status === 'fail') {
+      res.status(503).json({
+        status: 'not ready',
+        reason: 'circuit breaker open'
       });
       return;
     }

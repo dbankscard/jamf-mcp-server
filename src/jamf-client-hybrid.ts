@@ -4,6 +4,7 @@ import { createLogger } from './server/logger.js';
 import { getDefaultAgentPool } from './utils/http-agent-pool.js';
 import { JamfComputer, JamfComputerDetails, JamfSearchResponse, JamfApiResponse } from './types/jamf-api.js';
 import { isAxiosError, getErrorMessage, getAxiosErrorStatus, getAxiosErrorData } from './utils/type-guards.js';
+import { CircuitBreaker, CircuitBreakerOptions } from './utils/retry.js';
 
 const logger = createLogger('jamf-client-hybrid');
 const agentPool = getDefaultAgentPool();
@@ -20,6 +21,17 @@ export interface JamfApiClientConfig {
   // TLS/SSL options
   rejectUnauthorized?: boolean; // Default: true for security
   // Note: Set to false only for development/testing with self-signed certificates
+  // Circuit breaker options
+  circuitBreaker?: {
+    /** Enable circuit breaker (default: false) */
+    enabled?: boolean;
+    /** Number of failures before opening circuit (default: 5) */
+    failureThreshold?: number;
+    /** Time in ms to wait before trying again (default: 60000) */
+    resetTimeout?: number;
+    /** Number of successful requests in half-open to close (default: 3) */
+    halfOpenRequests?: number;
+  };
 }
 
 export interface JamfAuthToken {
@@ -64,15 +76,19 @@ export class JamfApiClientHybrid {
   private basicAuthHeader: string | null = null;
   private _readOnlyMode: boolean;
   private config: JamfApiClientConfig;
-  
+
   // Capabilities flags
   private hasOAuth2: boolean;
   private hasBasicAuth: boolean;
   private oauth2Available: boolean = false;
   private bearerTokenAvailable: boolean = false;
-  
+
   // Cache
   private cachedSearchId: number | null = null;
+
+  // Circuit breaker for API calls
+  private circuitBreaker: CircuitBreaker | null = null;
+  private circuitBreakerEnabled: boolean = false;
 
   constructor(config: JamfApiClientConfig) {
     this.config = config;
@@ -90,7 +106,22 @@ export class JamfApiClientHybrid {
     if (this.hasBasicAuth) {
       this.basicAuthHeader = `Basic ${Buffer.from(`${config.username}:${config.password}`).toString('base64')}`;
     }
-    
+
+    // Initialize circuit breaker if enabled
+    if (config.circuitBreaker?.enabled) {
+      this.circuitBreakerEnabled = true;
+      this.circuitBreaker = new CircuitBreaker({
+        failureThreshold: config.circuitBreaker.failureThreshold ?? 5,
+        resetTimeout: config.circuitBreaker.resetTimeout ?? 60000,
+        halfOpenRequests: config.circuitBreaker.halfOpenRequests ?? 3,
+      });
+      logger.info('Circuit breaker enabled', {
+        failureThreshold: config.circuitBreaker.failureThreshold ?? 5,
+        resetTimeout: config.circuitBreaker.resetTimeout ?? 60000,
+        halfOpenRequests: config.circuitBreaker.halfOpenRequests ?? 3,
+      });
+    }
+
     // Initialize axios instance
     this.axiosInstance = axios.create({
       baseURL: config.baseUrl,
@@ -210,6 +241,99 @@ export class JamfApiClientHybrid {
       hasBasicAuth: this.hasBasicAuth,
       hasOAuth2: this.hasOAuth2,
     };
+  }
+
+  /**
+   * Get circuit breaker status for health checks
+   */
+  getCircuitBreakerStatus(): {
+    enabled: boolean;
+    state: 'CLOSED' | 'OPEN' | 'HALF_OPEN' | 'DISABLED';
+    failureCount: number;
+    config: {
+      failureThreshold: number;
+      resetTimeout: number;
+      halfOpenRequests: number;
+    } | null;
+  } {
+    if (!this.circuitBreakerEnabled || !this.circuitBreaker) {
+      return {
+        enabled: false,
+        state: 'DISABLED',
+        failureCount: 0,
+        config: null,
+      };
+    }
+
+    return {
+      enabled: true,
+      state: this.circuitBreaker.getState() as 'CLOSED' | 'OPEN' | 'HALF_OPEN',
+      failureCount: this.circuitBreaker.getFailureCount(),
+      config: {
+        failureThreshold: this.config.circuitBreaker?.failureThreshold ?? 5,
+        resetTimeout: this.config.circuitBreaker?.resetTimeout ?? 60000,
+        halfOpenRequests: this.config.circuitBreaker?.halfOpenRequests ?? 3,
+      },
+    };
+  }
+
+  /**
+   * Execute a function through the circuit breaker if enabled
+   * Otherwise, execute directly
+   */
+  private async executeWithCircuitBreaker<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.circuitBreakerEnabled && this.circuitBreaker) {
+      return this.circuitBreaker.execute(fn);
+    }
+    return fn();
+  }
+
+  /**
+   * Make a GET request through the circuit breaker
+   */
+  private async protectedGet<T = unknown>(url: string, config?: Parameters<AxiosInstance['get']>[1]): Promise<T> {
+    return this.executeWithCircuitBreaker(async () => {
+      const response = await this.axiosInstance.get<T>(url, config);
+      return response.data;
+    });
+  }
+
+  /**
+   * Make a POST request through the circuit breaker
+   */
+  private async protectedPost<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: Parameters<AxiosInstance['post']>[2]
+  ): Promise<T> {
+    return this.executeWithCircuitBreaker(async () => {
+      const response = await this.axiosInstance.post<T>(url, data, config);
+      return response.data;
+    });
+  }
+
+  /**
+   * Make a PUT request through the circuit breaker
+   */
+  private async protectedPut<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: Parameters<AxiosInstance['put']>[2]
+  ): Promise<T> {
+    return this.executeWithCircuitBreaker(async () => {
+      const response = await this.axiosInstance.put<T>(url, data, config);
+      return response.data;
+    });
+  }
+
+  /**
+   * Make a DELETE request through the circuit breaker
+   */
+  private async protectedDelete<T = unknown>(url: string, config?: Parameters<AxiosInstance['delete']>[1]): Promise<T> {
+    return this.executeWithCircuitBreaker(async () => {
+      const response = await this.axiosInstance.delete<T>(url, config);
+      return response.data;
+    });
   }
 
   /**

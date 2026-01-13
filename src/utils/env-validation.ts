@@ -146,6 +146,15 @@ export const EnhancedModeSchema = z.object({
     .optional()
     .transform((val) => (val ? parseFloat(val) : 2))
     .pipe(z.number().min(1).max(5).optional()),
+
+  /** Circuit breaker failure threshold before opening (1-20) */
+  JAMF_CIRCUIT_BREAKER_THRESHOLD: positiveInt(1, 20, 5),
+
+  /** Circuit breaker reset timeout in ms (5000-300000) */
+  JAMF_CIRCUIT_BREAKER_RESET_TIMEOUT: positiveInt(5000, 300000, 60000),
+
+  /** Circuit breaker half-open requests before closing (1-10) */
+  JAMF_CIRCUIT_BREAKER_HALF_OPEN_REQUESTS: positiveInt(1, 10, 3),
 });
 
 // ============================================================================
