@@ -9,7 +9,7 @@
     "jamf-mcp-http": "dist/index-http.js"
   },
   "scripts": {
-    "test:skills": "npm run build:quick && node test-all-skills.mjs",
+    "test:skills": "npm run build:quick && node scripts/test-all-skills.mjs",
     "build:quick": "tsc",
     "build": "npm run test:skills && tsc && chmod +x dist/index-main.js dist/index.js dist/index-enhanced.js dist/index-http.js",
     "build:force": "tsc && chmod +x dist/index-main.js dist/index.js dist/index-enhanced.js dist/index-http.js",

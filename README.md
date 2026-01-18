@@ -111,10 +111,10 @@ Connect ChatGPT to your Jamf Pro instance using natural language:
 # Clone and run
 git clone https://github.com/dbankscard/jamf-mcp-server.git
 cd jamf-mcp-server
-./start-chatgpt-poc.sh
+./scripts/start-chatgpt-poc.sh
 ```
 
-See our [ChatGPT Quick Start Guide](QUICK_START.md) for 5-minute setup.
+See our [ChatGPT Quick Start Guide](docs/QUICK_START.md) for 5-minute setup.
 
 ### For Claude Desktop Users
 ```bash
@@ -252,9 +252,9 @@ Advanced multi-step operations powered by the skills system:
 
 ### For ChatGPT Users
 See our detailed guides:
-- [**Quick Start Guide**](QUICK_START.md) - Fork and deploy in 5 minutes
-- [**Full Setup Guide**](CHATGPT_CONNECTOR_README.md) - Detailed setup instructions
-- [**POC Setup**](PROOF_OF_CONCEPT_SETUP.md) - Local development with tunnels
+- [**Quick Start Guide**](docs/QUICK_START.md) - Fork and deploy in 5 minutes
+- [**Full Setup Guide**](docs/CHATGPT_SETUP.md) - Detailed setup instructions
+- [**POC Setup**](docs/PROOF_OF_CONCEPT_SETUP.md) - Local development with tunnels
 - [**Architecture**](docs/CHATGPT_CONNECTOR_FLOW.md) - How it works
 - [**Deployment Guide**](docs/CHATGPT_DEPLOYMENT.md) - Production deployment
 
