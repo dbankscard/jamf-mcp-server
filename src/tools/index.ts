@@ -3973,24 +3973,12 @@ export function registerTools(server: Server, jamfClient: any): void {
         }
 
         case 'getPackageDeploymentHistory': {
-          const { packageId, limit } = GetPackageDeploymentHistorySchema.parse(args);
-          const history = await jamfClient.getPackageDeploymentHistory(packageId, limit);
-          
+          const { packageId } = GetPackageDeploymentHistorySchema.parse(args);
+          const result = await jamfClient.getPackageDeploymentHistory(packageId);
+
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              packageId: packageId,
-              deploymentCount: history.length,
-              deployments: history.map((d: any) => ({
-                date: d.date_completed_utc || d.date_completed,
-                status: d.status,
-                deviceName: d.computer_name || d.device_name,
-                deviceId: d.computer_id || d.device_id,
-                username: d.username,
-                policyName: d.policy_name,
-                policyId: d.policy_id,
-              })),
-            }, null, 2),
+            text: JSON.stringify(result, null, 2),
           };
 
           return { content: [content] };

@@ -1418,37 +1418,13 @@ export class JamfApiClientHybrid {
    */
   async getPackageDeploymentHistory(packageId: string): Promise<any> {
     await this.ensureAuthenticated();
-    
+
     try {
-      // Package deployment history is typically tracked through policies
-      // First get the package details to understand its usage
-      const packageDetails = await this.getPackageDetails(packageId);
-      
-      // Get all policies and filter those using this package
-      const policies = await this.listPolicies(1000);
-      const policiesUsingPackage: any[] = [];
-      
-      // Check each policy to see if it uses this package
-      for (const policy of policies) {
-        try {
-          const policyDetails = await this.getPolicyDetails(policy.id);
-          const packagesInPolicy = policyDetails.package_configuration?.packages || [];
-          
-          if (packagesInPolicy.some((p: any) => String(p.id) === String(packageId))) {
-            policiesUsingPackage.push({
-              policyId: policy.id,
-              policyName: policy.name,
-              enabled: policyDetails.general?.enabled,
-              frequency: policyDetails.general?.frequency,
-              targetedDevices: policyDetails.scope?.computers?.length || 0,
-              lastModified: policyDetails.general?.date_time_limitations?.activation_date,
-            });
-          }
-        } catch (err) {
-          logger.info(`Failed to get details for policy ${policy.id}:`, err);
-        }
-      }
-      
+      const [packageDetails, policiesUsingPackage] = await Promise.all([
+        this.getPackageDetails(packageId),
+        this.getPoliciesUsingPackage(packageId),
+      ]);
+
       return {
         package: {
           id: packageDetails.id,
@@ -1468,26 +1444,33 @@ export class JamfApiClientHybrid {
   }
 
   /**
-   * Get policies using a specific package
+   * Get policies using a specific package — fetches policy details in parallel batches
    */
   async getPoliciesUsingPackage(packageId: string): Promise<any[]> {
     await this.ensureAuthenticated();
-    
+
     try {
-      // Get all policies
       const policies = await this.listPolicies(1000);
       const policiesUsingPackage: any[] = [];
-      
-      // Check each policy to see if it uses this package
-      for (const policy of policies) {
-        try {
-          const policyDetails = await this.getPolicyDetails(policy.id);
+
+      // Fetch policy details in parallel batches of 10
+      const batchSize = 10;
+      for (let i = 0; i < policies.length; i += batchSize) {
+        const batch = policies.slice(i, i + batchSize);
+        const results = await Promise.allSettled(
+          batch.map(policy => this.getPolicyDetails(policy.id))
+        );
+
+        for (let j = 0; j < results.length; j++) {
+          const result = results[j];
+          if (result.status !== 'fulfilled') continue;
+          const policyDetails = result.value;
           const packagesInPolicy = policyDetails.package_configuration?.packages || [];
-          
+
           if (packagesInPolicy.some((p: any) => String(p.id) === String(packageId))) {
             policiesUsingPackage.push({
-              id: policy.id,
-              name: policy.name,
+              id: batch[j].id,
+              name: batch[j].name,
               enabled: policyDetails.general?.enabled,
               frequency: policyDetails.general?.frequency,
               category: policyDetails.category,
@@ -1496,11 +1479,9 @@ export class JamfApiClientHybrid {
               packageAction: packagesInPolicy.find((p: any) => String(p.id) === String(packageId))?.action || 'Install',
             });
           }
-        } catch (err) {
-          logger.info(`Failed to get details for policy ${policy.id}:`, err);
         }
       }
-      
+
       return policiesUsingPackage;
     } catch (error) {
       logger.info('Failed to get policies using package:', error);
@@ -2478,51 +2459,19 @@ export class JamfApiClientHybrid {
   async getPackageDeploymentStats(packageId: string): Promise<any> {
     try {
       logger.info(`Generating package deployment statistics for package ${packageId}...`);
-      
-      // Get package details
-      const packageDetails = await this.getPackageDetails(packageId);
-      
-      // Get policies using this package
-      const policiesUsingPackage = await this.getPoliciesUsingPackage(packageId);
-      
-      // Calculate total target devices
+
+      // Fetch package details and policies in parallel
+      const [packageDetails, policiesUsingPackage] = await Promise.all([
+        this.getPackageDetails(packageId),
+        this.getPoliciesUsingPackage(packageId),
+      ]);
+
+      // Use data already available from getPoliciesUsingPackage to avoid re-fetching
       let totalTargetDevices = 0;
-      const policyStats = [];
-      
-      for (const policy of policiesUsingPackage) {
-        let scopeSize = 0;
-        
-        // Try to get more detailed policy info to calculate scope
-        try {
-          const fullPolicy = await this.getPolicyDetails(policy.id.toString());
-          
-          // Calculate scope size
-          if (fullPolicy.scope?.all_computers) {
-            scopeSize = await this.getComputerCount();
-          } else {
-            scopeSize = fullPolicy.scope?.computers?.length || 0;
-            
-            // Add computers from groups
-            for (const group of (fullPolicy.scope?.computer_groups || [])) {
-              try {
-                const groupDetails = await this.getComputerGroupDetails(group.id.toString());
-                scopeSize += groupDetails.computers?.length || 0;
-              } catch (err) {
-                logger.info(`Failed to get group details for ${group.id}:`, err);
-              }
-            }
-          }
-          
-          // Subtract exclusions
-          scopeSize -= fullPolicy.scope?.exclusions?.computers?.length || 0;
-        } catch (err) {
-          logger.info(`Failed to get detailed scope for policy ${policy.id}:`, err);
-          scopeSize = policy.targetedComputers || 0;
-        }
-        
+      const policyStats = policiesUsingPackage.map(policy => {
+        const scopeSize = (policy.targetedComputers || 0);
         totalTargetDevices += scopeSize;
-        
-        policyStats.push({
+        return {
           policyId: policy.id,
           policyName: policy.name,
           enabled: policy.enabled,
@@ -2531,8 +2480,8 @@ export class JamfApiClientHybrid {
           packageAction: policy.packageAction,
           scopeSize,
           targetedComputerGroups: policy.targetedComputerGroups,
-        });
-      }
+        };
+      });
       
       return {
         package: {
