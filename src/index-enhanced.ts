@@ -13,8 +13,8 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { JamfApiClientHybrid } from './jamf-client-hybrid.js';
-import { registerTools } from './tools/index-compat.js';
-import { registerResources } from './resources/index-compat.js';
+import { registerTools } from './tools/index.js';
+import { registerResources } from './resources/index.js';
 import { registerPrompts } from './prompts/index.js';
 import { SkillsManager } from './skills/manager.js';
 import { registerSkillsAsMCPTools } from './tools/skills-mcp-integration.js';
@@ -55,6 +55,36 @@ const server = new Server(
       resources: {},
       prompts: {},
     },
+    instructions: `You are connected to a Jamf Pro MDM server managing Apple devices (macOS, iOS, iPadOS, tvOS). This is the enhanced server with automatic retries, rate limiting, and circuit breaker.
+
+## Quick Start — Common Questions
+- "How's my fleet?" → Use \`getFleetOverview\` (single call replaces 4-6 individual calls)
+- "Tell me about device X" → Use \`getDeviceFullProfile\` with name, serial, or ID
+- "What's our security posture?" → Use \`getSecurityPosture\` for encryption, compliance, OS currency
+- "How is policy X performing?" → Use \`getPolicyAnalysis\` with policy ID or name
+
+## Tool Categories (by prefix)
+- **Read-only (safe):** \`search*\`, \`list*\`, \`get*\`, \`check*\` — no side effects
+- **Write/create:** \`create*\`, \`clone*\`, \`update*\`, \`set*\` — modifies configuration
+- **Destructive (confirm required):** \`execute*\`, \`deploy*\`, \`send*\`, \`delete*\`, \`flush*\`, \`remove*\` — affects devices or deletes data
+
+## Performance Tips
+1. **Prefer compound tools** (\`getFleetOverview\`, \`getDeviceFullProfile\`, \`getSecurityPosture\`, \`getPolicyAnalysis\`) — they run parallel API calls internally
+2. **Use \`getDevicesBatch\`** instead of calling \`getDeviceDetails\` in a loop
+3. **Use resources** (jamf://reports/*) for pre-aggregated reports like compliance, encryption, OS versions
+4. **Use \`getInventorySummary\`** for fleet-wide inventory stats without fetching individual devices
+
+## Response Format
+Many tools return enriched responses with:
+- \`summary\`: Human-readable 1-2 sentence overview
+- \`suggestedNextActions\`: Array of recommended follow-up tool calls
+- \`data\`: The full API response data
+- \`metadata\`: Result count, timestamp
+
+## Important Notes
+- All destructive tools require \`confirm: true\` parameter
+- Device identifiers can be Jamf IDs, serial numbers, or device names (compound tools resolve automatically)
+- The server supports both Jamf Pro Modern API and Classic API with automatic fallback`,
   }
 );
 

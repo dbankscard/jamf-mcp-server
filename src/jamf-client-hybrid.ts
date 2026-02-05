@@ -4,6 +4,7 @@ import { createLogger } from './server/logger.js';
 import { getDefaultAgentPool } from './utils/http-agent-pool.js';
 import { JamfComputer, JamfComputerDetails, JamfSearchResponse, JamfApiResponse } from './types/jamf-api.js';
 import { isAxiosError, getErrorMessage, getAxiosErrorStatus, getAxiosErrorData } from './utils/type-guards.js';
+import { LRUCache } from './utils/lru-cache.js';
 
 const logger = createLogger('jamf-client-hybrid');
 const agentPool = getDefaultAgentPool();
@@ -66,6 +67,7 @@ export class JamfApiClientHybrid {
   
   // Cache
   private cachedSearchId: number | null = null;
+  private apiCache: LRUCache<any> = new LRUCache({ maxSize: 200, maxAge: 60000 });
 
   constructor(config: JamfApiClientConfig) {
     this.config = config;
@@ -91,19 +93,22 @@ export class JamfApiClientHybrid {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
-      timeout: 10000,
+      timeout: 30000,
       httpsAgent: agentPool.getHttpsAgent(), // Use pooled agent
     });
     
     // Add request interceptor to handle auth based on endpoint
     this.axiosInstance.interceptors.request.use((config) => {
-      // Classic API endpoints need Basic auth
       if (config.url?.includes('/JSSResource/')) {
+        // Classic API: prefer Basic auth, but fall back to Bearer token
+        // (Jamf Classic API accepts both Basic and Bearer auth)
         if (this.basicAuthHeader) {
           config.headers['Authorization'] = this.basicAuthHeader;
+        } else if (this.oauth2Available && this.oauth2Token) {
+          config.headers['Authorization'] = `Bearer ${this.oauth2Token.token}`;
+        } else if (this.bearerTokenAvailable && this.bearerToken) {
+          config.headers['Authorization'] = `Bearer ${this.bearerToken.token}`;
         }
-        // Note: We keep Accept as application/json for Classic API
-        // Jamf Classic API can return JSON if Accept header is set to application/json
       } else {
         // Modern API endpoints use Bearer token
         if (this.bearerTokenAvailable && this.bearerToken) {
@@ -119,6 +124,36 @@ export class JamfApiClientHybrid {
     // logger.info(`Jamf Hybrid Client initialized with:`);
     // logger.info(`  - OAuth2 (Client Credentials): ${this.hasOAuth2 ? 'Available' : 'Not configured'}`);
     // logger.info(`  - Basic Auth (Bearer Token): ${this.hasBasicAuth ? 'Available' : 'Not configured'}`);
+  }
+
+  /**
+   * Cached GET helper — returns cached value if available, otherwise calls fetcher and caches result.
+   * Write operations should call invalidateCache() to clear relevant entries.
+   */
+  private async cachedGet<T>(cacheKey: string, fetcher: () => Promise<T>): Promise<T> {
+    const cached = this.apiCache.get(cacheKey);
+    if (cached !== undefined) {
+      logger.debug(`Cache hit: ${cacheKey}`);
+      return cached as T;
+    }
+    const result = await fetcher();
+    this.apiCache.set(cacheKey, result);
+    return result;
+  }
+
+  /**
+   * Invalidate cache entries matching a prefix
+   */
+  private invalidateCache(prefix?: string): void {
+    if (!prefix) {
+      this.apiCache.clear();
+      return;
+    }
+    for (const key of this.apiCache.keys()) {
+      if (key.startsWith(prefix)) {
+        this.apiCache.delete(key);
+      }
+    }
   }
 
   /**
@@ -273,11 +308,49 @@ export class JamfApiClientHybrid {
   }
 
   /**
+   * Get total computer count without fetching all records.
+   * Uses Modern API page-size=1 to read totalCount, falls back to Classic API.
+   */
+  async getComputerCount(): Promise<number> {
+    await this.ensureAuthenticated();
+
+    // Try Modern API first — returns { totalCount, results }
+    try {
+      const response = await this.axiosInstance.get('/api/v1/computers-inventory', {
+        params: { 'page-size': 1 },
+      });
+      if (typeof response.data.totalCount === 'number') {
+        return response.data.totalCount;
+      }
+    } catch (error) {
+      logger.debug('Modern API count failed, falling back to Classic API', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    // Fall back to Classic API — list returns minimal objects
+    try {
+      const response = await this.axiosInstance.get('/JSSResource/computers');
+      const computers = response.data.computers || [];
+      return computers.length;
+    } catch (error) {
+      logger.info('Classic API count failed:', error);
+    }
+
+    return 0;
+  }
+
+  /**
    * Search computers
    */
   async searchComputers(query: string, limit: number = 100): Promise<Computer[]> {
+    const cacheKey = `searchComputers:${query}:${limit}`;
+    return this.cachedGet(cacheKey, () => this._searchComputersImpl(query, limit));
+  }
+
+  private async _searchComputersImpl(query: string, limit: number): Promise<Computer[]> {
     await this.ensureAuthenticated();
-    
+
     // Try Modern API first
     try {
       logger.info('Searching computers using Modern API...');
@@ -410,9 +483,13 @@ export class JamfApiClientHybrid {
   }
 
   /**
-   * Get computer details
+   * Get computer details (cached for 60s)
    */
   async getComputerDetails(id: string): Promise<any> {
+    return this.cachedGet(`computerDetails:${id}`, () => this._getComputerDetailsImpl(id));
+  }
+
+  private async _getComputerDetailsImpl(id: string): Promise<any> {
     await this.ensureAuthenticated();
     
     // Try Modern API first
@@ -481,6 +558,7 @@ export class JamfApiClientHybrid {
 
   // Execute policy (if not in read-only mode)
   async executePolicy(policyId: string, deviceIds: string[]): Promise<void> {
+    this.invalidateCache('listPolicies');
     if (this.readOnlyMode) {
       throw new Error('Cannot execute policies in read-only mode');
     }
@@ -509,6 +587,8 @@ export class JamfApiClientHybrid {
 
   // Update inventory (if not in read-only mode)
   async updateInventory(deviceId: string): Promise<void> {
+    this.invalidateCache(`computerDetails:${deviceId}`);
+    this.invalidateCache('searchComputers');
     if (this.readOnlyMode) {
       throw new Error('Cannot update inventory in read-only mode');
     }
@@ -539,19 +619,21 @@ export class JamfApiClientHybrid {
     }
   }
 
-  // List policies
+  // List policies (cached for 60s)
   async listPolicies(limit: number = 100): Promise<any[]> {
-    await this.ensureAuthenticated();
-    
-    try {
-      // Try Classic API (policies are typically in Classic API)
-      const response = await this.axiosInstance.get('/JSSResource/policies');
-      const policies = response.data.policies || [];
-      return policies.slice(0, limit);
-    } catch (error) {
-      logger.info('Failed to list policies:', error);
-      return [];
-    }
+    return this.cachedGet(`listPolicies:${limit}`, async () => {
+      await this.ensureAuthenticated();
+
+      try {
+        // Try Classic API (policies are typically in Classic API)
+        const response = await this.axiosInstance.get('/JSSResource/policies');
+        const policies = response.data.policies || [];
+        return policies.slice(0, limit);
+      } catch (error) {
+        logger.info('Failed to list policies:', error);
+        return [];
+      }
+    });
   }
 
   // Search policies
@@ -597,6 +679,7 @@ export class JamfApiClientHybrid {
    * Create a new policy
    */
   async createPolicy(policyData: any): Promise<any> {
+    this.invalidateCache('listPolicies');
     if (this.readOnlyMode) {
       throw new Error('Cannot create policies in read-only mode');
     }
@@ -654,6 +737,7 @@ export class JamfApiClientHybrid {
    * Update an existing policy
    */
   async updatePolicy(policyId: string, policyData: any): Promise<any> {
+    this.invalidateCache('listPolicies');
     if (this.readOnlyMode) {
       throw new Error('Cannot update policies in read-only mode');
     }
@@ -2189,11 +2273,14 @@ export class JamfApiClientHybrid {
     try {
       logger.info('Generating inventory summary report...');
       
-      // Fetch computers and mobile devices
-      const [computers, mobileDevices] = await Promise.all([
-        this.searchComputers('', 10000).catch(() => []),
-        this.searchMobileDevices('', 10000).catch(() => [])
+      // Fetch a sample for distribution analysis + accurate counts
+      const [computers, mobileDevices, computerCount] = await Promise.all([
+        this.searchComputers('', 500).catch(() => []),
+        this.searchMobileDevices('', 500).catch(() => []),
+        this.getComputerCount().catch(() => 0),
       ]);
+      const totalComputers = computerCount || computers.length;
+      const totalMobileDevices = mobileDevices.length;
       
       // OS Version distribution for computers
       const computerOSVersions = new Map<string, number>();
@@ -2234,31 +2321,37 @@ export class JamfApiClientHybrid {
       // Convert maps to sorted arrays
       const sortByCount = (a: [string, number], b: [string, number]) => b[1] - a[1];
       
+      const sampleComputerCount = computers.length || 1; // avoid div-by-zero
+      const sampleMobileCount = mobileDevices.length || 1;
+
       return {
         summary: {
-          totalComputers: computers.length,
-          totalMobileDevices: mobileDevices.length,
-          totalDevices: computers.length + mobileDevices.length,
+          totalComputers,
+          totalMobileDevices,
+          totalDevices: totalComputers + totalMobileDevices,
+          note: totalComputers > computers.length
+            ? `Distribution based on sample of ${computers.length} computers`
+            : undefined,
         },
         computers: {
-          total: computers.length,
+          total: totalComputers,
           osVersionDistribution: Array.from(computerOSVersions.entries())
             .sort(sortByCount)
-            .map(([version, count]) => ({ version, count, percentage: ((count / computers.length) * 100).toFixed(1) })),
+            .map(([version, count]) => ({ version, count, percentage: ((count / sampleComputerCount) * 100).toFixed(1) })),
           modelDistribution: Array.from(computerModels.entries())
             .sort(sortByCount)
             .slice(0, 20) // Top 20 models
-            .map(([model, count]) => ({ model, count, percentage: ((count / computers.length) * 100).toFixed(1) })),
+            .map(([model, count]) => ({ model, count, percentage: ((count / sampleComputerCount) * 100).toFixed(1) })),
         },
         mobileDevices: {
-          total: mobileDevices.length,
+          total: totalMobileDevices,
           osVersionDistribution: Array.from(mobileOSVersions.entries())
             .sort(sortByCount)
-            .map(([version, count]) => ({ version, count, percentage: ((count / mobileDevices.length) * 100).toFixed(1) })),
+            .map(([version, count]) => ({ version, count, percentage: ((count / sampleMobileCount) * 100).toFixed(1) })),
           modelDistribution: Array.from(mobileModels.entries())
             .sort(sortByCount)
             .slice(0, 20) // Top 20 models
-            .map(([model, count]) => ({ model, count, percentage: ((count / mobileDevices.length) * 100).toFixed(1) })),
+            .map(([model, count]) => ({ model, count, percentage: ((count / sampleMobileCount) * 100).toFixed(1) })),
         },
         generatedAt: new Date().toISOString(),
       };
@@ -2297,10 +2390,9 @@ export class JamfApiClientHybrid {
         }
       }
       
-      // If all computers are scoped, get total count
+      // If all computers are scoped, get total count efficiently
       if (allComputersScoped) {
-        const allComputers = await this.searchComputers('', 10000);
-        totalInScope = allComputers.length;
+        totalInScope = await this.getComputerCount();
       }
       
       // Get policy logs if available (this would require access to policy logs endpoint)
@@ -2406,8 +2498,7 @@ export class JamfApiClientHybrid {
           
           // Calculate scope size
           if (fullPolicy.scope?.all_computers) {
-            const allComputers = await this.searchComputers('', 10000);
-            scopeSize = allComputers.length;
+            scopeSize = await this.getComputerCount();
           } else {
             scopeSize = fullPolicy.scope?.computers?.length || 0;
             
@@ -2492,14 +2583,16 @@ export class JamfApiClientHybrid {
     try {
       logger.info(`Generating software version report for "${softwareName}"...`);
       
-      // Search for computers that might have this software
+      // Search for a sample of computers to check software
       // Note: This is a basic implementation - full software inventory would require
       // access to computer applications endpoint
-      const computers = await this.searchComputers('', 10000);
-      
-      // We'll need to fetch details for a sample of computers to check software
-      const sampleSize = Math.min(100, computers.length); // Check up to 100 computers
-      const sampledComputers = computers.slice(0, sampleSize);
+      const [computers, totalComputerCount] = await Promise.all([
+        this.searchComputers('', 100),
+        this.getComputerCount().catch(() => 0),
+      ]);
+
+      const sampleSize = computers.length;
+      const sampledComputers = computers;
       
       const softwareVersions = new Map<string, { count: number; computers: any[] }>();
       let computersWithSoftware = 0;
@@ -2578,8 +2671,8 @@ export class JamfApiClientHybrid {
         search: {
           softwareName,
           computersChecked: sampleSize,
-          totalComputers: computers.length,
-          note: `Checked ${sampleSize} of ${computers.length} computers for performance reasons`,
+          totalComputers: totalComputerCount || sampleSize,
+          note: `Checked ${sampleSize} of ${totalComputerCount || sampleSize} computers for performance reasons`,
         },
         results: {
           computersWithSoftware,
@@ -3094,6 +3187,989 @@ export class JamfApiClientHybrid {
     } catch (error) {
       logger.info('Failed to ensure compliance search exists:', error);
       throw new Error(`Failed to ensure compliance search: ${getErrorMessage(error)}`);
+    }
+  }
+
+  // ==========================================
+  // Computer History Tools
+  // ==========================================
+
+  /**
+   * Get full computer history including policy logs, MDM commands, audit events
+   */
+  async getComputerHistory(deviceId: string, subset?: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      const subsetPath = subset ? `/subset/${subset}` : '';
+      logger.info(`Getting computer history for device ${deviceId}${subset ? ` (subset: ${subset})` : ''}...`);
+      const response = await this.axiosInstance.get(
+        `/JSSResource/computerhistory/id/${deviceId}${subsetPath}`,
+      );
+      return response.data.computer_history || response.data;
+    } catch (error) {
+      logger.info('Failed to get computer history:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get policy execution logs for a specific computer
+   */
+  async getComputerPolicyLogs(deviceId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting policy logs for device ${deviceId}...`);
+      const response = await this.axiosInstance.get(
+        `/JSSResource/computerhistory/id/${deviceId}/subset/PolicyLogs`,
+      );
+      return response.data.computer_history?.policy_logs || response.data;
+    } catch (error) {
+      logger.info('Failed to get computer policy logs:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get MDM command history for a specific computer
+   */
+  async getComputerMDMCommandHistory(deviceId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting MDM command history for device ${deviceId}...`);
+      const response = await this.axiosInstance.get(
+        `/JSSResource/computerhistory/id/${deviceId}/subset/Commands`,
+      );
+      return response.data.computer_history?.commands || response.data;
+    } catch (error) {
+      logger.info('Failed to get computer MDM command history:', error);
+      throw error;
+    }
+  }
+
+  // ==========================================
+  // Computer MDM Commands
+  // ==========================================
+
+  /**
+   * Send MDM command to a macOS computer (lock, wipe, restart, etc.)
+   */
+  async sendComputerMDMCommand(deviceId: string, command: string): Promise<any> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot send MDM commands in read-only mode');
+    }
+
+    await this.ensureAuthenticated();
+
+    const validCommands = [
+      'DeviceLock',
+      'EraseDevice',
+      'RestartDevice',
+      'ShutDownDevice',
+      'EnableRemoteDesktop',
+      'DisableRemoteDesktop',
+      'SetRecoveryLock',
+      'UpdateInventory',
+      'UnmanageDevice',
+    ];
+
+    if (!validCommands.includes(command)) {
+      throw new Error(`Invalid computer MDM command: ${command}. Valid commands are: ${validCommands.join(', ')}`);
+    }
+
+    try {
+      logger.info(`Sending MDM command '${command}' to computer ${deviceId} using Modern API...`);
+      const response = await this.axiosInstance.post('/api/v1/mdm/commands', {
+        clientData: [
+          {
+            managementId: deviceId,
+            clientType: 'COMPUTER',
+          },
+        ],
+        commandData: {
+          commandType: command,
+        },
+      });
+      logger.info(`Successfully sent MDM command '${command}' to computer ${deviceId}`);
+      return response.data;
+    } catch (error) {
+      logger.info('Modern API failed for computer MDM command, trying Classic API...');
+
+      try {
+        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_command><general><command>${this.escapeXml(command)}</command></general><computers><computer><id>${this.escapeXml(deviceId)}</id></computer></computers></computer_command>`;
+        const response = await this.axiosInstance.post(
+          '/JSSResource/computercommands/command/' + command,
+          xmlPayload,
+          {
+            headers: {
+              'Content-Type': 'application/xml',
+              'Accept': 'application/json',
+            },
+          },
+        );
+        logger.info(`Successfully sent MDM command '${command}' to computer ${deviceId} via Classic API`);
+        return response.data;
+      } catch (classicError) {
+        logger.info('Classic API also failed for computer MDM command:', classicError);
+        throw classicError;
+      }
+    }
+  }
+
+  // ==========================================
+  // Command Flush
+  // ==========================================
+
+  /**
+   * Flush (clear) pending or failed MDM commands for a computer
+   */
+  async flushMDMCommands(deviceId: string, commandStatus: string): Promise<void> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot flush MDM commands in read-only mode');
+    }
+
+    await this.ensureAuthenticated();
+
+    const validStatuses = ['Pending', 'Failed', 'Pending+Failed'];
+    if (!validStatuses.includes(commandStatus)) {
+      throw new Error(`Invalid command status: ${commandStatus}. Valid statuses are: ${validStatuses.join(', ')}`);
+    }
+
+    try {
+      logger.info(`Flushing ${commandStatus} MDM commands for computer ${deviceId}...`);
+      await this.axiosInstance.delete(
+        `/JSSResource/commandflush/computers/id/${deviceId}/status/${commandStatus}`,
+      );
+      logger.info(`Successfully flushed ${commandStatus} MDM commands for computer ${deviceId}`);
+    } catch (error) {
+      logger.info('Failed to flush MDM commands:', error);
+      throw error;
+    }
+  }
+
+  // ==========================================
+  // Buildings
+  // ==========================================
+
+  /**
+   * List all buildings
+   */
+  async listBuildings(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing buildings using Modern API...');
+      const response = await this.axiosInstance.get('/api/v1/buildings');
+      return response.data.results || [];
+    } catch (error) {
+      logger.info('Modern API failed, trying Classic API...');
+
+      try {
+        const response = await this.axiosInstance.get('/JSSResource/buildings');
+        return response.data.buildings || [];
+      } catch (classicError) {
+        logger.info('Classic API also failed for buildings:', classicError);
+        throw classicError;
+      }
+    }
+  }
+
+  /**
+   * Get building details by ID
+   */
+  async getBuildingDetails(buildingId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting building details for ${buildingId} using Modern API...`);
+      const response = await this.axiosInstance.get(`/api/v1/buildings/${buildingId}`);
+      return response.data;
+    } catch (error) {
+      logger.info('Modern API failed, trying Classic API...');
+
+      try {
+        const response = await this.axiosInstance.get(`/JSSResource/buildings/id/${buildingId}`);
+        return response.data.building;
+      } catch (classicError) {
+        logger.info('Classic API also failed for building details:', classicError);
+        throw classicError;
+      }
+    }
+  }
+
+  // ==========================================
+  // Departments
+  // ==========================================
+
+  /**
+   * List all departments
+   */
+  async listDepartments(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing departments using Modern API...');
+      const response = await this.axiosInstance.get('/api/v1/departments');
+      return response.data.results || [];
+    } catch (error) {
+      logger.info('Modern API failed, trying Classic API...');
+
+      try {
+        const response = await this.axiosInstance.get('/JSSResource/departments');
+        return response.data.departments || [];
+      } catch (classicError) {
+        logger.info('Classic API also failed for departments:', classicError);
+        throw classicError;
+      }
+    }
+  }
+
+  /**
+   * Get department details by ID
+   */
+  async getDepartmentDetails(departmentId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting department details for ${departmentId} using Modern API...`);
+      const response = await this.axiosInstance.get(`/api/v1/departments/${departmentId}`);
+      return response.data;
+    } catch (error) {
+      logger.info('Modern API failed, trying Classic API...');
+
+      try {
+        const response = await this.axiosInstance.get(`/JSSResource/departments/id/${departmentId}`);
+        return response.data.department;
+      } catch (classicError) {
+        logger.info('Classic API also failed for department details:', classicError);
+        throw classicError;
+      }
+    }
+  }
+
+  // ==========================================
+  // Categories
+  // ==========================================
+
+  /**
+   * List all categories
+   */
+  async listCategories(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing categories using Modern API...');
+      const response = await this.axiosInstance.get('/api/v1/categories');
+      return response.data.results || [];
+    } catch (error) {
+      logger.info('Modern API failed, trying Classic API...');
+
+      try {
+        const response = await this.axiosInstance.get('/JSSResource/categories');
+        return response.data.categories || [];
+      } catch (classicError) {
+        logger.info('Classic API also failed for categories:', classicError);
+        throw classicError;
+      }
+    }
+  }
+
+  /**
+   * Get category details by ID
+   */
+  async getCategoryDetails(categoryId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting category details for ${categoryId} using Modern API...`);
+      const response = await this.axiosInstance.get(`/api/v1/categories/${categoryId}`);
+      return response.data;
+    } catch (error) {
+      logger.info('Modern API failed, trying Classic API...');
+
+      try {
+        const response = await this.axiosInstance.get(`/JSSResource/categories/id/${categoryId}`);
+        return response.data.category;
+      } catch (classicError) {
+        logger.info('Classic API also failed for category details:', classicError);
+        throw classicError;
+      }
+    }
+  }
+
+  // ==========================================
+  // Local Admin Password (LAPS) Tools
+  // ==========================================
+
+  /**
+   * Get the current local admin password for a device
+   */
+  async getLocalAdminPassword(clientManagementId: string, username: string): Promise<any> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot retrieve LAPS passwords in read-only mode');
+    }
+
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting LAPS password for ${username} on device ${clientManagementId}...`);
+      const response = await this.axiosInstance.get(
+        `/api/v2/local-admin-password/${clientManagementId}/account/${username}/password`,
+      );
+      return response.data;
+    } catch (error) {
+      logger.info('Failed to get LAPS password:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get audit trail of LAPS password views/rotations
+   */
+  async getLocalAdminPasswordAudit(clientManagementId: string, username: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting LAPS audit for ${username} on device ${clientManagementId}...`);
+      const response = await this.axiosInstance.get(
+        `/api/v2/local-admin-password/${clientManagementId}/account/${username}/audit`,
+      );
+      return response.data;
+    } catch (error) {
+      logger.info('Failed to get LAPS audit:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * List LAPS-managed accounts on a device
+   */
+  async getLocalAdminPasswordAccounts(clientManagementId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting LAPS accounts for device ${clientManagementId}...`);
+      const response = await this.axiosInstance.get(
+        `/api/v2/local-admin-password/${clientManagementId}/accounts`,
+      );
+      return response.data;
+    } catch (error) {
+      logger.info('Failed to get LAPS accounts:', error);
+      throw error;
+    }
+  }
+
+  // ==========================================
+  // Patch Management Tools
+  // ==========================================
+
+  /**
+   * List all patch software title configurations
+   */
+  async listPatchSoftwareTitles(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing patch software titles...');
+      const response = await this.axiosInstance.get('/api/v2/patch-software-title-configurations');
+      return response.data.results || [];
+    } catch (error) {
+      logger.info('Failed to list patch software titles:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get details for a specific patch software title
+   */
+  async getPatchSoftwareTitleDetails(titleId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting patch software title details for ${titleId}...`);
+      const response = await this.axiosInstance.get(`/api/v2/patch-software-title-configurations/${titleId}`);
+      return response.data;
+    } catch (error) {
+      logger.info('Failed to get patch software title details:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * List patch policies, optionally filtered by software title
+   */
+  async listPatchPolicies(titleId?: string): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      const params: Record<string, string> = {};
+      if (titleId) {
+        params.filter = `softwareTitleConfigurationId==${titleId}`;
+      }
+      logger.info(`Listing patch policies${titleId ? ` for title ${titleId}` : ''}...`);
+      const response = await this.axiosInstance.get('/api/v2/patch-policies', { params });
+      return response.data.results || [];
+    } catch (error) {
+      logger.info('Failed to list patch policies:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get patch policy dashboard with compliance statistics
+   */
+  async getPatchPolicyDashboard(policyId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting patch policy dashboard for ${policyId}...`);
+      const response = await this.axiosInstance.get(`/api/v2/patch-policies/${policyId}/dashboard`);
+      return response.data;
+    } catch (error) {
+      logger.info('Failed to get patch policy dashboard:', error);
+      throw error;
+    }
+  }
+
+  // ==========================================
+  // Extension Attributes Tools
+  // ==========================================
+
+  /**
+   * List all computer extension attributes
+   */
+  async listComputerExtensionAttributes(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing computer extension attributes using Modern API...');
+      const response = await this.axiosInstance.get('/api/v1/computer-extension-attributes');
+      return response.data.results || [];
+    } catch (error) {
+      logger.info('Modern API failed, trying Classic API...');
+
+      try {
+        const response = await this.axiosInstance.get('/JSSResource/computerextensionattributes');
+        return response.data.computer_extension_attributes || [];
+      } catch (classicError) {
+        logger.info('Classic API also failed for extension attributes:', classicError);
+        throw classicError;
+      }
+    }
+  }
+
+  /**
+   * Get details for a specific computer extension attribute
+   */
+  async getComputerExtensionAttributeDetails(attributeId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting extension attribute details for ${attributeId} using Modern API...`);
+      const response = await this.axiosInstance.get(`/api/v1/computer-extension-attributes/${attributeId}`);
+      return response.data;
+    } catch (error) {
+      logger.info('Modern API failed, trying Classic API...');
+
+      try {
+        const response = await this.axiosInstance.get(`/JSSResource/computerextensionattributes/id/${attributeId}`);
+        return response.data.computer_extension_attribute;
+      } catch (classicError) {
+        logger.info('Classic API also failed for extension attribute details:', classicError);
+        throw classicError;
+      }
+    }
+  }
+
+  /**
+   * Create a new computer extension attribute
+   */
+  async createComputerExtensionAttribute(data: any): Promise<any> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot create extension attributes in read-only mode');
+    }
+
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Creating computer extension attribute using Modern API...');
+      const response = await this.axiosInstance.post('/api/v1/computer-extension-attributes', data);
+      return response.data;
+    } catch (error) {
+      logger.info('Modern API failed, trying Classic API...');
+
+      try {
+        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_extension_attribute><name>${this.escapeXml(data.name)}</name><description>${this.escapeXml(data.description || '')}</description><data_type>${this.escapeXml(data.dataType || 'String')}</data_type><input_type><type>${this.escapeXml(data.inputType || 'script')}</type>${data.scriptContents ? `<script>${this.escapeXml(data.scriptContents)}</script>` : ''}</input_type><inventory_display>${this.escapeXml(data.inventoryDisplay || 'Extension Attributes')}</inventory_display></computer_extension_attribute>`;
+        const response = await this.axiosInstance.post(
+          '/JSSResource/computerextensionattributes/id/0',
+          xmlPayload,
+          {
+            headers: {
+              'Content-Type': 'application/xml',
+              'Accept': 'application/json',
+            },
+          },
+        );
+        return response.data;
+      } catch (classicError) {
+        logger.info('Classic API also failed for creating extension attribute:', classicError);
+        throw classicError;
+      }
+    }
+  }
+
+  /**
+   * Update an existing computer extension attribute
+   */
+  async updateComputerExtensionAttribute(attributeId: string, data: any): Promise<any> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot update extension attributes in read-only mode');
+    }
+
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Updating extension attribute ${attributeId} using Modern API...`);
+      const response = await this.axiosInstance.put(`/api/v1/computer-extension-attributes/${attributeId}`, data);
+      return response.data;
+    } catch (error) {
+      logger.info('Modern API failed, trying Classic API...');
+
+      try {
+        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_extension_attribute>${data.name ? `<name>${this.escapeXml(data.name)}</name>` : ''}${data.description !== undefined ? `<description>${this.escapeXml(data.description)}</description>` : ''}${data.dataType ? `<data_type>${this.escapeXml(data.dataType)}</data_type>` : ''}${data.scriptContents ? `<input_type><type>script</type><script>${this.escapeXml(data.scriptContents)}</script></input_type>` : ''}</computer_extension_attribute>`;
+        const response = await this.axiosInstance.put(
+          `/JSSResource/computerextensionattributes/id/${attributeId}`,
+          xmlPayload,
+          {
+            headers: {
+              'Content-Type': 'application/xml',
+              'Accept': 'application/json',
+            },
+          },
+        );
+        return response.data;
+      } catch (classicError) {
+        logger.info('Classic API also failed for updating extension attribute:', classicError);
+        throw classicError;
+      }
+    }
+  }
+
+  // ==========================================
+  // Managed Software Updates Tools
+  // ==========================================
+
+  /**
+   * List all managed software update plans
+   */
+  async listSoftwareUpdatePlans(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing managed software update plans...');
+      const response = await this.axiosInstance.get('/api/v1/managed-software-updates/plans');
+      return response.data.results || [];
+    } catch (error) {
+      logger.info('Failed to list software update plans:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a managed software update plan
+   */
+  async createSoftwareUpdatePlan(deviceIds: string[], updateAction: string, versionType: string, specificVersion?: string): Promise<any> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot create software update plans in read-only mode');
+    }
+
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Creating managed software update plan...');
+      const payload: any = {
+        devices: deviceIds.map(id => ({ deviceId: id })),
+        config: {
+          updateAction,
+          versionType,
+        },
+      };
+      if (specificVersion) {
+        payload.config.specificVersion = specificVersion;
+      }
+      const response = await this.axiosInstance.post('/api/v1/managed-software-updates/plans', payload);
+      return response.data;
+    } catch (error) {
+      logger.info('Failed to create software update plan:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get details of a specific software update plan
+   */
+  async getSoftwareUpdatePlanDetails(planId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting software update plan details for ${planId}...`);
+      const response = await this.axiosInstance.get(`/api/v1/managed-software-updates/plans/${planId}`);
+      return response.data;
+    } catch (error) {
+      logger.info('Failed to get software update plan details:', error);
+      throw error;
+    }
+  }
+
+  // ==========================================
+  // Computer Prestages Tools
+  // ==========================================
+
+  /**
+   * List all computer enrollment prestages
+   */
+  async listComputerPrestages(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing computer prestages...');
+      const response = await this.axiosInstance.get('/api/v2/computer-prestages');
+      return response.data.results || [];
+    } catch (error) {
+      logger.info('Failed to list computer prestages:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get details of a specific computer prestage
+   */
+  async getComputerPrestageDetails(prestageId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting computer prestage details for ${prestageId}...`);
+      const response = await this.axiosInstance.get(`/api/v2/computer-prestages/${prestageId}`);
+      return response.data;
+    } catch (error) {
+      logger.info('Failed to get computer prestage details:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get the scope (assigned devices) for a computer prestage
+   */
+  async getComputerPrestageScope(prestageId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting computer prestage scope for ${prestageId}...`);
+      const response = await this.axiosInstance.get(`/api/v2/computer-prestages/${prestageId}/scope`);
+      return response.data;
+    } catch (error) {
+      logger.info('Failed to get computer prestage scope:', error);
+      throw error;
+    }
+  }
+
+  // ==========================================
+  // Network Segments Tools
+  // ==========================================
+
+  /**
+   * List all network segments
+   */
+  async listNetworkSegments(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing network segments using Modern API...');
+      const response = await this.axiosInstance.get('/api/v1/network-segments');
+      return response.data.results || [];
+    } catch (error) {
+      logger.info('Modern API failed, trying Classic API...');
+
+      try {
+        const response = await this.axiosInstance.get('/JSSResource/networksegments');
+        return response.data.network_segments || [];
+      } catch (classicError) {
+        logger.info('Classic API also failed for network segments:', classicError);
+        throw classicError;
+      }
+    }
+  }
+
+  /**
+   * Get details of a specific network segment
+   */
+  async getNetworkSegmentDetails(segmentId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting network segment details for ${segmentId} using Modern API...`);
+      const response = await this.axiosInstance.get(`/api/v1/network-segments/${segmentId}`);
+      return response.data;
+    } catch (error) {
+      logger.info('Modern API failed, trying Classic API...');
+
+      try {
+        const response = await this.axiosInstance.get(`/JSSResource/networksegments/id/${segmentId}`);
+        return response.data.network_segment;
+      } catch (classicError) {
+        logger.info('Classic API also failed for network segment details:', classicError);
+        throw classicError;
+      }
+    }
+  }
+
+  // ==========================================
+  // Mobile Prestages Tools
+  // ==========================================
+
+  /**
+   * List all mobile device enrollment prestages
+   */
+  async listMobilePrestages(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing mobile device prestages...');
+      const response = await this.axiosInstance.get('/api/v2/mobile-device-prestages');
+      return response.data.results || [];
+    } catch (error) {
+      logger.info('Failed to list mobile device prestages:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get details of a specific mobile device prestage
+   */
+  async getMobilePrestageDetails(prestageId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting mobile device prestage details for ${prestageId}...`);
+      const response = await this.axiosInstance.get(`/api/v2/mobile-device-prestages/${prestageId}`);
+      return response.data;
+    } catch (error) {
+      logger.info('Failed to get mobile device prestage details:', error);
+      throw error;
+    }
+  }
+
+  // ==========================================
+  // Accounts Tools
+  // ==========================================
+
+  /**
+   * List all Jamf Pro admin accounts and groups
+   */
+  async listAccounts(): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing accounts...');
+      const response = await this.axiosInstance.get('/JSSResource/accounts');
+      return response.data.accounts;
+    } catch (error) {
+      logger.info('Failed to list accounts:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get details of a specific admin account
+   */
+  async getAccountDetails(accountId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting account details for ${accountId}...`);
+      const response = await this.axiosInstance.get(`/JSSResource/accounts/userid/${accountId}`);
+      return response.data.account;
+    } catch (error) {
+      logger.info('Failed to get account details:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get details of a specific admin group
+   */
+  async getAccountGroupDetails(groupId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting account group details for ${groupId}...`);
+      const response = await this.axiosInstance.get(`/JSSResource/accounts/groupid/${groupId}`);
+      return response.data.group;
+    } catch (error) {
+      logger.info('Failed to get account group details:', error);
+      throw error;
+    }
+  }
+
+  // ==========================================
+  // Users Tools
+  // ==========================================
+
+  /**
+   * List all end-user records
+   */
+  async listUsers(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing users...');
+      const response = await this.axiosInstance.get('/JSSResource/users');
+      return response.data.users || [];
+    } catch (error) {
+      logger.info('Failed to list users:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get details of a specific user
+   */
+  async getUserDetails(userId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting user details for ${userId}...`);
+      const response = await this.axiosInstance.get(`/JSSResource/users/id/${userId}`);
+      return response.data.user;
+    } catch (error) {
+      logger.info('Failed to get user details:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search users by name or email
+   */
+  async searchUsers(query: string): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Searching users with query: ${query}...`);
+      const response = await this.axiosInstance.get(`/JSSResource/users/match/${encodeURIComponent(query)}`);
+      return response.data.users || [];
+    } catch (error) {
+      logger.info('Failed to search users:', error);
+      throw error;
+    }
+  }
+
+  // ==========================================
+  // App Installers Tools
+  // ==========================================
+
+  /**
+   * List all Jamf App Catalog titles
+   */
+  async listAppInstallers(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing app installers...');
+      const response = await this.axiosInstance.get('/api/v1/app-installers/titles');
+      return response.data.results || [];
+    } catch (error) {
+      logger.info('Failed to list app installers:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get details of a specific app installer title
+   */
+  async getAppInstallerDetails(titleId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting app installer details for ${titleId}...`);
+      const response = await this.axiosInstance.get(`/api/v1/app-installers/titles/${titleId}`);
+      return response.data;
+    } catch (error) {
+      logger.info('Failed to get app installer details:', error);
+      throw error;
+    }
+  }
+
+  // ==========================================
+  // Restricted Software Tools
+  // ==========================================
+
+  /**
+   * List all restricted software entries
+   */
+  async listRestrictedSoftware(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing restricted software...');
+      const response = await this.axiosInstance.get('/JSSResource/restrictedsoftware');
+      return response.data.restricted_software || [];
+    } catch (error) {
+      logger.info('Failed to list restricted software:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get details of a specific restricted software entry
+   */
+  async getRestrictedSoftwareDetails(softwareId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting restricted software details for ${softwareId}...`);
+      const response = await this.axiosInstance.get(`/JSSResource/restrictedsoftware/id/${softwareId}`);
+      return response.data.restricted_software;
+    } catch (error) {
+      logger.info('Failed to get restricted software details:', error);
+      throw error;
+    }
+  }
+
+  // ==========================================
+  // Webhooks Tools
+  // ==========================================
+
+  /**
+   * List all configured webhooks
+   */
+  async listWebhooks(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing webhooks...');
+      const response = await this.axiosInstance.get('/JSSResource/webhooks');
+      return response.data.webhooks || [];
+    } catch (error) {
+      logger.info('Failed to list webhooks:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get details of a specific webhook
+   */
+  async getWebhookDetails(webhookId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting webhook details for ${webhookId}...`);
+      const response = await this.axiosInstance.get(`/JSSResource/webhooks/id/${webhookId}`);
+      return response.data.webhook;
+    } catch (error) {
+      logger.info('Failed to get webhook details:', error);
+      throw error;
     }
   }
 
