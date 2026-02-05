@@ -90,11 +90,10 @@ export function registerSkillsAsMCPTools(
   // Initialize the skills manager with this context
   (skillsManager as any).context = skillContext;
 
-  // Get original handlers to extend them
-  const originalListToolsHandler = (server as any).getHandler?.(ListToolsRequestSchema) || 
-                                  (server as any).__handlers?.['tools/list'];
-  const originalCallToolHandler = (server as any).getHandler?.(CallToolRequestSchema) ||
-                                 (server as any).__handlers?.['tools/call'];
+  // Get original handlers to extend them (stored in SDK's _requestHandlers Map)
+  const handlersMap = (server as any)._requestHandlers as Map<string, Function> | undefined;
+  const originalListToolsHandler = handlersMap?.get('tools/list');
+  const originalCallToolHandler = handlersMap?.get('tools/call');
 
   // Register the list tools handler that includes skills
   server.setRequestHandler(ListToolsRequestSchema, async (request) => {

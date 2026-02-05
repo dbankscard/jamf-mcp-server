@@ -160,14 +160,59 @@ export class SkillsManager {
         schemaFields[paramName] = zodType;
       }
 
-      const inputSchema = z.object(schemaFields);
+      // Build JSON Schema properties manually instead of using Zod shape
+      const jsonProperties: Record<string, any> = {};
+      const requiredFields: string[] = [];
+
+      for (const [paramName, paramDef] of Object.entries(skill.metadata.parameters)) {
+        const prop: any = {};
+
+        switch (paramDef.type) {
+          case 'string':
+            prop.type = 'string';
+            break;
+          case 'number':
+            prop.type = 'number';
+            break;
+          case 'boolean':
+            prop.type = 'boolean';
+            break;
+          case 'array':
+            prop.type = 'array';
+            break;
+          case 'object':
+            prop.type = 'object';
+            break;
+          default:
+            prop.type = 'string';
+        }
+
+        if (paramDef.enum) {
+          prop.enum = paramDef.enum;
+        }
+
+        if (paramDef.description) {
+          prop.description = paramDef.description;
+        }
+
+        if (paramDef.default !== undefined) {
+          prop.default = paramDef.default;
+        }
+
+        if (paramDef.required) {
+          requiredFields.push(paramName);
+        }
+
+        jsonProperties[paramName] = prop;
+      }
 
       tools.push({
         name: `skill_${name.replace(/-/g, '_')}`,
         description: skill.metadata.description,
         inputSchema: {
           type: 'object' as const,
-          properties: inputSchema.shape
+          properties: jsonProperties,
+          ...(requiredFields.length > 0 ? { required: requiredFields } : {}),
         } as any
       });
     }
