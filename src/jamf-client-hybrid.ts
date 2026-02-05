@@ -3835,8 +3835,14 @@ export class JamfApiClientHybrid {
 
     try {
       logger.info('Listing computer prestages...');
-      const response = await this.axiosInstance.get('/api/v2/computer-prestages');
-      return response.data.results || [];
+      // Try v3 first (newer Jamf versions), fall back to v2
+      try {
+        const response = await this.axiosInstance.get('/api/v3/computer-prestages');
+        return response.data.results || [];
+      } catch {
+        const response = await this.axiosInstance.get('/api/v2/computer-prestages');
+        return response.data.results || [];
+      }
     } catch (error) {
       logger.info('Failed to list computer prestages:', error);
       throw error;
@@ -3851,8 +3857,13 @@ export class JamfApiClientHybrid {
 
     try {
       logger.info(`Getting computer prestage details for ${prestageId}...`);
-      const response = await this.axiosInstance.get(`/api/v2/computer-prestages/${prestageId}`);
-      return response.data;
+      try {
+        const response = await this.axiosInstance.get(`/api/v3/computer-prestages/${prestageId}`);
+        return response.data;
+      } catch {
+        const response = await this.axiosInstance.get(`/api/v2/computer-prestages/${prestageId}`);
+        return response.data;
+      }
     } catch (error) {
       logger.info('Failed to get computer prestage details:', error);
       throw error;
@@ -3867,8 +3878,13 @@ export class JamfApiClientHybrid {
 
     try {
       logger.info(`Getting computer prestage scope for ${prestageId}...`);
-      const response = await this.axiosInstance.get(`/api/v2/computer-prestages/${prestageId}/scope`);
-      return response.data;
+      try {
+        const response = await this.axiosInstance.get(`/api/v3/computer-prestages/${prestageId}/scope`);
+        return response.data;
+      } catch {
+        const response = await this.axiosInstance.get(`/api/v2/computer-prestages/${prestageId}/scope`);
+        return response.data;
+      }
     } catch (error) {
       logger.info('Failed to get computer prestage scope:', error);
       throw error;
@@ -4057,8 +4073,16 @@ export class JamfApiClientHybrid {
 
     try {
       logger.info(`Searching users with query: ${query}...`);
-      const response = await this.axiosInstance.get(`/JSSResource/users/match/${encodeURIComponent(query)}`);
-      return response.data.users || [];
+      // /JSSResource/users/match/ is not available on all Jamf versions
+      // Fall back to listing all users and filtering client-side
+      const allUsers = await this.listUsers();
+      const lowerQuery = query.toLowerCase();
+      return allUsers.filter((u: any) => {
+        const name = (u.name || '').toLowerCase();
+        const fullName = (u.full_name || '').toLowerCase();
+        const email = (u.email || u.email_address || '').toLowerCase();
+        return name.includes(lowerQuery) || fullName.includes(lowerQuery) || email.includes(lowerQuery);
+      });
     } catch (error) {
       logger.info('Failed to search users:', error);
       throw error;
