@@ -50,7 +50,7 @@ export JAMF_PASSWORD="your-password"
 npm run agent:simple
 
 # Example commands
-jamf> show dwight's computer
+jamf> show jane's computer
 jamf> list all policies
 jamf> get details for device 759
 ```

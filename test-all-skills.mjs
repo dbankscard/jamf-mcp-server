@@ -12,7 +12,7 @@ import chalk from 'chalk';
 const mockDevices = [
   { 
     id: 706, 
-    name: 'GH-IT-0300', 
+    name: 'CORP-IT-0300',
     serialNumber: 'ABC123', 
     lastContactTime: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days old
     osVersion: '14.1.0',
@@ -20,7 +20,7 @@ const mockDevices = [
   },
   { 
     id: 762, 
-    name: 'GH-IT-0319', 
+    name: 'CORP-IT-0319',
     serialNumber: 'DEF456', 
     lastContactTime: new Date().toISOString(), // Today
     osVersion: '14.2.0',
@@ -28,7 +28,7 @@ const mockDevices = [
   },
   { 
     id: 759, 
-    name: 'GH-IT-0322', 
+    name: 'CORP-IT-0322',
     serialNumber: 'GHI789', 
     lastContactTime: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), // 10 days old
     osVersion: '13.6.0',
@@ -72,9 +72,9 @@ const createMockContext = () => {
                 device: {
                   general: device,
                   userAndLocation: {
-                    username: 'dwight.banks',
-                    realName: 'Dwight Banks',
-                    email: 'dwight.banks@globalhc.io',
+                    username: 'jane.smith',
+                    realName: 'Jane Smith',
+                    email: 'jane.smith@example.com',
                     department: 'IT Infrastructure',
                     building: 'Main Office'
                   }
@@ -276,7 +276,7 @@ async function runAllTests() {
   await runner.runTest(
     'Device Search - Basic search',
     'device-search',
-    { query: 'GH-IT' },
+    { query: 'CORP-IT' },
     [
       Object.assign(
         (result) => result.success === true,
@@ -284,23 +284,23 @@ async function runAllTests() {
       ),
       Object.assign(
         (result) => result.data.devices.length === 3,
-        { message: 'Should find 3 GH-IT devices' }
+        { message: 'Should find 3 CORP-IT devices' }
       )
     ]
   );
 
   // Test 2: Device Search - Possessive form
   await runner.runTest(
-    'Device Search - Possessive form (Dwight\'s MacBook)',
+    'Device Search - Possessive form (Jane\'s MacBook)',
     'device-search',
-    { query: "Dwight's MacBook", searchType: 'all' },
+    { query: "Jane's MacBook", searchType: 'all' },
     [
       Object.assign(
         (result) => result.success === true,
         { message: 'Should succeed' }
       ),
       Object.assign(
-        (result) => result.data.cleanQuery === 'Dwight' || result.success === true,
+        (result) => result.data.cleanQuery === 'Jane' || result.success === true,
         { message: 'Should handle possessive form' }
       )
     ]
@@ -310,7 +310,7 @@ async function runAllTests() {
   await runner.runTest(
     'Device Search - User search',
     'device-search',
-    { query: 'dwight', searchType: 'user' },
+    { query: 'jane', searchType: 'user' },
     [
       Object.assign(
         (result) => result.success === true,
@@ -318,10 +318,10 @@ async function runAllTests() {
       ),
       Object.assign(
         (result) => {
-          // Since we have device 759 with user dwight.banks, it should be found
+          // Since we have device 759 with user jane.smith, it should be found
           return result.data.devices && result.data.devices.length > 0;
         },
-        { message: 'Should find devices for user dwight' }
+        { message: 'Should find devices for user jane' }
       )
     ]
   );
@@ -352,7 +352,7 @@ async function runAllTests() {
     'Batch Inventory Update',
     'batch-inventory-update',
     { 
-      deviceIdentifiers: ['GH-IT-0300', '759'],
+      deviceIdentifiers: ['CORP-IT-0300', '759'],
       identifierType: 'name',
       maxConcurrent: 2
     },
@@ -363,7 +363,7 @@ async function runAllTests() {
       ),
       Object.assign(
         (result) => result.data.successful.length === 1,
-        { message: 'Should update 1 device (GH-IT-0300)' }
+        { message: 'Should update 1 device (CORP-IT-0300)' }
       ),
       Object.assign(
         (result) => result.data.failed.length === 1,

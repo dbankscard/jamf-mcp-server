@@ -50,7 +50,7 @@ Instructions:
 5. Keep it simple - one tool call per request
 
 Examples:
-- "show dwight's computer" → searchDevices with query="dwight"
+- "show jane's computer" → searchDevices with query="jane"
 - "get details for device 759" → getDeviceDetails with deviceId="759"
 - "list all policies" → listPolicies
 `;

@@ -37,7 +37,7 @@ async function searchDevicesByPriority(context: SkillContext, userQuery: string)
   // Priority 1: Search IT devices (most likely for IT staff)
   try {
     const itResult = await context.callTool('searchDevices', {
-      query: 'GH-IT',
+      query: 'CORP-IT',
       limit: 20
     });
     if (itResult.data?.devices) {
@@ -50,7 +50,7 @@ async function searchDevicesByPriority(context: SkillContext, userQuery: string)
   // Priority 2: Search admin devices
   try {
     const admResult = await context.callTool('searchDevices', {
-      query: 'GH-ADM',
+      query: 'CORP-ADM',
       limit: 20
     });
     if (admResult.data?.devices) {

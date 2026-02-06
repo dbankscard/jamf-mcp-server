@@ -7,7 +7,7 @@ Added an AI-powered natural language interface that allows users to interact wit
 
 ### Key Features
 - **Natural Language Processing**: Convert plain English requests into MCP tool calls
-  - Example: "show dwight's computer" → executes searchDevices tool
+  - Example: "show jane's computer" → executes searchDevices tool
   - Example: "list all policies" → executes listPolicies tool
   
 - **Multiple AI Provider Support**:

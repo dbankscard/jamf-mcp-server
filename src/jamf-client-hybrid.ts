@@ -2698,9 +2698,9 @@ export class JamfApiClientHybrid {
                            searchData['Last Contact Time'] ||
                            computer.lastContactTime;
           
-          // If this is Dwight's computer, let's debug
-          if (computer.id === '759' || computer.name === 'GH-IT-0322') {
-            logger.info(`Found Dwight's computer (${computer.name}):`, {
+          // Debug target computer for troubleshooting
+          if (computer.id === '759' || computer.name === 'CORP-IT-0322') {
+            logger.info(`Found debug target computer (${computer.name}):`, {
               id: computer.id,
               searchData: searchData,
               checkInTime: checkInTime
