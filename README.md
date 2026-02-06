@@ -22,7 +22,7 @@ A comprehensive MCP (Model Context Protocol) server that enables AI assistants t
 - **Parallel API calls** — batch operations and compound tools run requests concurrently for faster results
 - **Correct Jamf terminology** — all documentation and tool descriptions align with official Jamf developer documentation
 
-![Tests](https://github.com/dbankscard/jamf-mcp-server/actions/workflows/test.yml/badge.svg)
+![Tests](https://github.com/dbankscard/jamf-mcp-server/actions/workflows/test-skills.yml/badge.svg)
 
 ## Quick Start
 
