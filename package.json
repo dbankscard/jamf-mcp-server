@@ -30,8 +30,8 @@
     "typecheck": "tsc --noEmit",
     "agent": "tsx src/agent/interface/CLIInterface.ts",
     "agent:simple": "tsx src/agent/simple-cli.ts",
-    "agent:example": "tsx examples/agent-example.ts",
-    "agent:demo": "tsx examples/agent-demo.ts"
+    "agent:example": "tsx chatgpt/examples/agent-example.ts",
+    "agent:demo": "tsx chatgpt/examples/agent-demo.ts"
   },
   "keywords": [
     "mcp",

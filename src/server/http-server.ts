@@ -132,12 +132,12 @@ app.use('/api/v1/skills', createSkillsRouter(skillsManager));
 
 // Serve OpenAPI schema for ChatGPT
 app.get('/chatgpt-openapi-schema.json', (_req: Request, res: Response) => {
-  res.sendFile('chatgpt-openapi-schema.json', { root: path.join(process.cwd(), 'public') });
+  res.sendFile('chatgpt-openapi-schema.json', { root: path.join(process.cwd(), 'chatgpt', 'public') });
 });
 
 // Serve Skills OpenAPI schema for ChatGPT
 app.get('/chatgpt-skills-openapi.json', (_req: Request, res: Response) => {
-  res.sendFile('chatgpt-skills-openapi.json', { root: path.join(process.cwd(), 'public') });
+  res.sendFile('chatgpt-skills-openapi.json', { root: path.join(process.cwd(), 'chatgpt', 'public') });
 });
 
 // ChatGPT endpoints (no auth required for POC)

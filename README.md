@@ -8,7 +8,7 @@
 [![Resources](https://img.shields.io/badge/Resources-12-green)]()
 [![Prompts](https://img.shields.io/badge/Prompts-12-blue)]()
 
-A comprehensive MCP (Model Context Protocol) server that enables AI assistants to interact with Jamf Pro for complete Apple device management. Works with Claude Desktop, Cody, and **ChatGPT** (via MCP Connectors).
+A comprehensive MCP (Model Context Protocol) server that enables AI assistants to interact with Jamf Pro for complete Apple device management. Works with Claude Desktop and **ChatGPT** (via MCP Connectors).
 
 **103 tools** | **12 resources** | **12 workflow prompts** | **5 skills**
 
@@ -40,10 +40,10 @@ Configure your credentials in Claude Desktop (see [Configuration](#configuration
 ```bash
 git clone https://github.com/dbankscard/jamf-mcp-server.git
 cd jamf-mcp-server
-./start-chatgpt-poc.sh
+./chatgpt/start-chatgpt-poc.sh
 ```
 
-See our [ChatGPT Quick Start Guide](QUICK_START.md) for 5-minute setup.
+See our [ChatGPT Quick Start Guide](chatgpt/QUICK_START.md) for 5-minute setup.
 
 ## What You Can Do
 
@@ -275,7 +275,7 @@ Add to your Claude Desktop config file:
 
 ### ChatGPT Configuration
 
-See [ChatGPT Connector Setup](CHATGPT_CONNECTOR_README.md) for detailed instructions.
+See [ChatGPT Connector Setup](chatgpt/CHATGPT_CONNECTOR_README.md) for detailed instructions.
 
 ### Enhanced Mode (Optional)
 
