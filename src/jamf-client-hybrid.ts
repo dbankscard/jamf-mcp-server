@@ -2876,6 +2876,184 @@ export class JamfApiClientHybrid {
   }
 
   /**
+   * Get compliance report for resources endpoint
+   * Returns compliance data based on device check-in status
+   */
+  async getComplianceReport(days: number = 30): Promise<any> {
+    try {
+      logger.info(`Generating compliance report (${days} day window)...`);
+
+      const [computers, totalCount] = await Promise.all([
+        this.searchComputers('', 500).catch(() => []),
+        this.getComputerCount().catch(() => 0),
+      ]);
+
+      const total = totalCount || computers.length;
+      const now = new Date();
+      const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+      let compliant = 0;
+      let nonCompliant = 0;
+      let notReporting = 0;
+      const issues: any[] = [];
+
+      for (const computer of computers) {
+        const lastContact = computer.lastContactTime || (computer as any).last_contact_time;
+        if (!lastContact || lastContact === 'Unknown') {
+          notReporting++;
+          if (issues.length < 20) {
+            issues.push({ id: computer.id, name: computer.name, issue: 'No check-in data' });
+          }
+        } else {
+          const contactDate = new Date(lastContact);
+          if (contactDate >= cutoff) {
+            compliant++;
+          } else {
+            nonCompliant++;
+            if (issues.length < 20) {
+              issues.push({ id: computer.id, name: computer.name, issue: `Last check-in: ${lastContact}` });
+            }
+          }
+        }
+      }
+
+      return { total, compliant, nonCompliant, notReporting, issues };
+    } catch (error) {
+      logger.info('Failed to generate compliance report:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get storage report for resources endpoint
+   * Returns disk usage analytics across the fleet
+   */
+  async getStorageReport(): Promise<any> {
+    try {
+      logger.info('Generating storage report...');
+
+      const computers = await this.searchComputers('', 100).catch(() => []);
+      const storageData: any[] = [];
+      let totalCapacity = 0;
+      let totalAvailable = 0;
+      let devicesLowStorage = 0;
+      const LOW_STORAGE_THRESHOLD = 0.1; // 10%
+
+      // Fetch details for a sample to get disk info
+      const sample = computers.slice(0, 50);
+      await Promise.allSettled(
+        sample.map(async (computer: any) => {
+          try {
+            const details = await this.getComputerDetails(computer.id);
+            const storage = details.hardware?.storage || details.computer?.hardware?.storage || [];
+            for (const disk of storage) {
+              const capacity = parseInt(disk.drive_capacity_mb || disk.size || '0', 10);
+              const available = parseInt(disk.partition_available_mb || disk.available || '0', 10);
+              if (capacity > 0) {
+                totalCapacity += capacity;
+                totalAvailable += available;
+                const pctFree = available / capacity;
+                if (pctFree < LOW_STORAGE_THRESHOLD) {
+                  devicesLowStorage++;
+                }
+                storageData.push({
+                  deviceId: computer.id,
+                  deviceName: computer.name,
+                  capacityMB: capacity,
+                  availableMB: available,
+                  percentFree: (pctFree * 100).toFixed(1),
+                });
+              }
+            }
+          } catch { /* skip */ }
+        })
+      );
+
+      return {
+        summary: {
+          devicesSampled: sample.length,
+          totalFleetDevices: computers.length,
+          devicesWithStorageData: storageData.length,
+          devicesLowStorage,
+          lowStorageThreshold: '10%',
+        },
+        fleet: {
+          totalCapacityGB: (totalCapacity / 1024).toFixed(1),
+          totalAvailableGB: (totalAvailable / 1024).toFixed(1),
+          averagePercentFree: storageData.length > 0
+            ? (storageData.reduce((sum, d) => sum + parseFloat(d.percentFree), 0) / storageData.length).toFixed(1) + '%'
+            : 'N/A',
+        },
+        lowStorageDevices: storageData
+          .filter(d => parseFloat(d.percentFree) < 10)
+          .sort((a, b) => parseFloat(a.percentFree) - parseFloat(b.percentFree))
+          .slice(0, 20),
+      };
+    } catch (error) {
+      logger.info('Failed to generate storage report:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get OS version report for resources endpoint
+   * Returns OS version distribution across the fleet
+   */
+  async getOSVersionReport(): Promise<any> {
+    try {
+      logger.info('Generating OS version report...');
+
+      const [computers, mobileDevices] = await Promise.all([
+        this.searchComputers('', 500).catch(() => []),
+        this.searchMobileDevices('', 500).catch(() => []),
+      ]);
+
+      // Computer OS distribution
+      const computerOS = new Map<string, number>();
+      for (const c of computers) {
+        const os = c.osVersion || 'Unknown';
+        computerOS.set(os, (computerOS.get(os) || 0) + 1);
+      }
+
+      // Mobile OS distribution
+      const mobileOS = new Map<string, number>();
+      for (const d of mobileDevices) {
+        const os = d.osVersion || d.os_version || 'Unknown';
+        mobileOS.set(os, (mobileOS.get(os) || 0) + 1);
+      }
+
+      const sortByCount = (a: [string, number], b: [string, number]) => b[1] - a[1];
+      const computerTotal = computers.length || 1;
+      const mobileTotal = mobileDevices.length || 1;
+
+      return {
+        summary: {
+          totalComputers: computers.length,
+          totalMobileDevices: mobileDevices.length,
+          uniqueComputerOSVersions: computerOS.size,
+          uniqueMobileOSVersions: mobileOS.size,
+        },
+        computerOSVersions: Array.from(computerOS.entries())
+          .sort(sortByCount)
+          .map(([version, count]) => ({
+            version,
+            count,
+            percentage: ((count / computerTotal) * 100).toFixed(1) + '%',
+          })),
+        mobileOSVersions: Array.from(mobileOS.entries())
+          .sort(sortByCount)
+          .map(([version, count]) => ({
+            version,
+            count,
+            percentage: ((count / mobileTotal) * 100).toFixed(1) + '%',
+          })),
+      };
+    } catch (error) {
+      logger.info('Failed to generate OS version report:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Create an advanced computer search via Classic API
    */
   async createAdvancedComputerSearch(searchData: {

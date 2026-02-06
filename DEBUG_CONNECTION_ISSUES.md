@@ -82,7 +82,7 @@ Test your Jamf API directly:
 # Test with self-signed certificate (-k flag)
 curl -k https://your-instance.jamfcloud.com/api/v1/auth/token \
   -H "Accept: application/json" \
-  -u "api:your-password"
+  -u "your-username:your-password"
 ```
 
 ## Claude Desktop Console
@@ -109,7 +109,7 @@ Test network connectivity:
 ping your-instance.jamfcloud.com
 
 # Test if port is open
-nc -zv your-instance.jamfcloud.com 8443
+nc -zv your-instance.jamfcloud.com 443
 ```
 
 ## Rebuilding After Changes
