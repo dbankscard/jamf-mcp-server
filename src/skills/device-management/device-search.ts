@@ -38,7 +38,7 @@ interface DeviceWithUser {
 
 /**
  * Extract the actual name from possessive forms
- * e.g., "User's" -> User, "James'" -> "James"
+ * e.g., "Jane's" -> "Jane", "James'" -> "James"
  */
 function extractNameFromPossessive(query: string): string {
   // Remove possessive endings
@@ -460,7 +460,7 @@ export const metadata: any = {
     {
       description: 'Search for user devices',
       params: {
-        query: "User's MacBook",
+        query: "Jane's MacBook",
         searchType: 'user'
       }
     },

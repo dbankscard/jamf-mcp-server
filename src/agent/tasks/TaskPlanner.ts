@@ -140,12 +140,12 @@ Guidelines for planning:
 5. Flag tasks that modify data as requiring confirmation
 
 SIMPLE REQUESTS (one step only):
-- "Show User's computer" → searchDevices with {"query": "jane"}
+- "Show Jane's computer" → searchDevices with {"query": "jane"}
 - "Find devices with Chrome" → searchDevices with {"query": "chrome"}
-- "List all computers" → listDevices 
+- "List all computers" → listDevices
 
 ONLY use getDeviceDetails when:
-- User provides a specific device ID: "Show details for device 759"
+- User provides a specific device ID: "Show details for device 123"
 - User explicitly asks for "full details" or "detailed information"
 
 IMPORTANT - Tool Usage Rules:
@@ -156,7 +156,7 @@ IMPORTANT - Tool Usage Rules:
 5. Keep plans simple - one step is often enough
 
 For common requests:
-- "Show User's computer" → Use searchDevices with {"query": "jane"} - this returns device ID, name, and serial number
+- "Show Jane's computer" → Use searchDevices with {"query": "jane"} - this returns device ID, name, and serial number
 - "Get details for device 123" → Use getDeviceDetails with {"deviceId": "123"}
 - "List all computers" → Use listDevices with appropriate filters
 

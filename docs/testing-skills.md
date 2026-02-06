@@ -37,7 +37,7 @@ The test suite covers all skills with the following test scenarios:
 
 ### 1. Device Search
 - **Basic search**: Tests searching by device name
-- **Possessive form**: Tests natural language like "User's MacBook"
+- **Possessive form**: Tests natural language like "Jane's MacBook"
 - **User search**: Tests searching by assigned user
 
 ### 2. Find Outdated Devices

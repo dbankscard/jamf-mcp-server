@@ -12,7 +12,7 @@ import chalk from 'chalk';
 const mockDevices = [
   { 
     id: 706, 
-    name: 'CORP-IT-0300', 
+    name: 'CORP-IT-0300',
     serialNumber: 'ABC123', 
     lastContactTime: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days old
     osVersion: '14.1.0',
@@ -20,7 +20,7 @@ const mockDevices = [
   },
   { 
     id: 762, 
-    name: 'CORP-IT-0319', 
+    name: 'CORP-IT-0319',
     serialNumber: 'DEF456', 
     lastContactTime: new Date().toISOString(), // Today
     osVersion: '14.2.0',
@@ -28,7 +28,7 @@ const mockDevices = [
   },
   { 
     id: 759, 
-    name: 'CORP-IT-0322', 
+    name: 'CORP-IT-0322',
     serialNumber: 'GHI789', 
     lastContactTime: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), // 10 days old
     osVersion: '13.6.0',
@@ -293,7 +293,7 @@ async function runAllTests() {
   await runner.runTest(
     'Device Search - Possessive form (Jane\'s MacBook)',
     'device-search',
-    { query: "User's MacBook", searchType: 'all' },
+    { query: "Jane's MacBook", searchType: 'all' },
     [
       Object.assign(
         (result) => result.success === true,
@@ -310,7 +310,7 @@ async function runAllTests() {
   await runner.runTest(
     'Device Search - User search',
     'device-search',
-    { query: jane, searchType: 'user' },
+    { query: 'jane', searchType: 'user' },
     [
       Object.assign(
         (result) => result.success === true,
