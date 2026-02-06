@@ -4,24 +4,30 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue)](https://www.typescriptlang.org/)
 [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-1.0.0-purple)](https://github.com/modelcontextprotocol/sdk)
-[![MCP Badge](https://lobehub.com/badge/mcp-full/dbankscard-jamf-mcp-server)]
-(https://lobehub.com/badge/mcp-full/dbankscard-jamf-mcp-server)
+[![Tools](https://img.shields.io/badge/Tools-103-orange)]()
+[![Resources](https://img.shields.io/badge/Resources-12-green)]()
+[![Prompts](https://img.shields.io/badge/Prompts-12-blue)]()
 
-A comprehensive MCP (Model Context Protocol) server that enables AI assistants to interact with Jamf Pro for complete Apple device management. Works with Claude Desktop, Cody, and now **ChatGPT** (via MCP Connectors).
+A comprehensive MCP (Model Context Protocol) server that enables AI assistants to interact with Jamf Pro for complete Apple device management. Works with Claude Desktop, Cody, and **ChatGPT** (via MCP Connectors).
+
+**103 tools** | **12 resources** | **12 workflow prompts** | **5 skills**
 
 ![Tests](https://github.com/dbankscard/jamf-mcp-server/actions/workflows/test.yml/badge.svg)
 
-<p align="center">
-  <img src="docs/images/chatgpt-apps-connectors-page.png" alt="ChatGPT MCP Connector" width="600">
-</p>
+## Quick Start
 
-## 🚀 Quick Start
-
-### For ChatGPT Users (NEW!)
-Connect ChatGPT to your Jamf Pro instance using natural language:
-
+### For Claude Desktop Users
 ```bash
-# Clone and run
+git clone https://github.com/dbankscard/jamf-mcp-server.git
+cd jamf-mcp-server
+npm install
+npm run build
+```
+
+Configure your credentials in Claude Desktop (see [Configuration](#configuration) below).
+
+### For ChatGPT Users
+```bash
 git clone https://github.com/dbankscard/jamf-mcp-server.git
 cd jamf-mcp-server
 ./start-chatgpt-poc.sh
@@ -29,164 +35,211 @@ cd jamf-mcp-server
 
 See our [ChatGPT Quick Start Guide](QUICK_START.md) for 5-minute setup.
 
-### For Claude Desktop Users
-```bash
-# Clone the repository
-git clone https://github.com/dbankscard/jamf-mcp-server.git
-cd jamf-mcp-server
+## What You Can Do
 
-# Install dependencies
-npm install
-
-# Build the project
-npm run build
-```
-
-Configure your credentials in Claude Desktop (see Configuration section below).
-
-## 🎯 What You Can Do
-
-### With ChatGPT (Beta)
-Ask natural language questions about your Jamf devices:
-- "Find all MacBooks that haven't checked in for 7 days"
-- "Show me device compliance statistics"
+Ask natural language questions about your Jamf fleet:
+- "How is my fleet doing?" — uses `getFleetOverview` for a single-call summary
+- "Tell me about GH-ADM-0228" — uses `getDeviceFullProfile` to resolve by name, serial, or ID
+- "What's our security posture?" — uses `getSecurityPosture` for encryption and compliance analysis
+- "How is the Software Install policy performing?" — uses `getPolicyAnalysis` with auto-resolve by name
+- "Find all devices that haven't checked in for 30 days"
 - "Deploy software updates to the marketing team"
-- "Generate a compliance report for all iOS devices"
+- "Retrieve the LAPS password for this device"
+- "Show me patch compliance across the fleet"
 
-**Powered by Skills**: Complex multi-step operations are handled automatically through our skills system, providing intelligent device search, batch operations, and automated workflows.
-- "Search for devices assigned to the marketing department"
-- "List computers with low disk space"
+## Tools (103)
 
-<p align="center">
-  <img src="docs/images/chatgpt-jamf-query-example.png" alt="ChatGPT querying Jamf for a device" width="600">
-</p>
+### Compound Tools (Start Here)
+These combine multiple API calls into a single operation:
 
-### With Claude Desktop
-Full device management capabilities including:
-- Search and manage devices
-- Deploy software and policies
-- Manage configuration profiles
-- Execute scripts and packages
-- Generate compliance reports
-- And much more...
+- **getFleetOverview**: Comprehensive fleet summary — inventory counts, compliance rates, and mobile device status in one call
+- **getDeviceFullProfile**: Complete device profile by name, serial, or ID — resolves automatically and fetches details, policy logs, and history in parallel
+- **getSecurityPosture**: Fleet security analysis — FileVault encryption rates, compliance status, and OS version currency
+- **getPolicyAnalysis**: Policy analysis by ID or name — configuration, scope, compliance, and performance
 
-## 🔐 Security Notice
+### Device Management
+- **searchDevices**: Find devices by name, serial number, IP address, or username
+- **getDeviceDetails**: Detailed device information by ID
+- **checkDeviceCompliance**: Find devices that haven't reported in X days
+- **getDevicesBatch**: Get details for multiple devices in a single request
+- **updateInventory**: Force inventory update on a device
+- **debugDeviceDates**: Debug tool for raw device date fields
 
-**IMPORTANT**: Before using this server:
-1. Copy `.env.example` to `.env` and fill in your credentials
-2. Never commit `.env` or any files containing credentials
-3. Review and update any shell scripts with your own credentials
-4. If credentials were accidentally exposed, rotate them immediately
+### Computer History & MDM Commands
+- **getComputerHistory**: Full computer history — policy logs, MDM commands, audit events, screen sharing, user/location changes
+- **getComputerPolicyLogs**: Policy execution logs showing success/failure per device
+- **getComputerMDMCommandHistory**: MDM command history with status and timestamps
+- **sendComputerMDMCommand**: Send MDM commands to macOS — lock, wipe, restart, shutdown, remote desktop (requires confirmation)
+- **flushMDMCommands**: Clear pending/failed MDM commands to unstick devices (requires confirmation)
 
-## Features
+### Policy Management
+- **listPolicies**: List all policies with optional category filter
+- **getPolicyDetails**: Detailed policy info including scope, scripts, and packages
+- **searchPolicies**: Search policies by name
+- **executePolicy**: Run a policy on specific devices (requires confirmation)
+- **createPolicy**: Create a new policy with full configuration (requires confirmation)
+- **updatePolicy**: Update an existing policy (requires confirmation)
+- **clonePolicy**: Clone a policy with a new name (requires confirmation)
+- **setPolicyEnabled**: Enable or disable a policy (requires confirmation)
+- **updatePolicyScope**: Add/remove computers and groups from policy scope (requires confirmation)
 
-### Tools (Executable Functions)
+### Script Management
+- **listScripts**: List all scripts
+- **searchScripts**: Search scripts by name
+- **getScriptDetails**: Full script content, parameters, and metadata
+- **deployScript**: Execute a script on devices (requires confirmation)
+- **createScript**: Create a new script (requires confirmation)
+- **updateScript**: Update an existing script (requires confirmation)
+- **deleteScript**: Delete a script (requires confirmation)
 
-#### Device Management
-- **searchDevices**: Find devices by name, serial number, IP address, or username (supports partial matching)
-- **getDeviceDetails**: Retrieve comprehensive device information by ID or name
-- **checkDeviceCompliance**: Find devices that haven't reported in X days (optimized for large fleets)
-- **getDevicesBatch**: Get details for multiple devices efficiently
-- **updateInventory**: Force inventory update on devices
+### Configuration Profile Management
+- **listConfigurationProfiles**: List profiles (computer or mobile device)
+- **getConfigurationProfileDetails**: Detailed profile information
+- **searchConfigurationProfiles**: Search profiles by name
+- **deployConfigurationProfile**: Deploy a profile to devices (requires confirmation)
+- **removeConfigurationProfile**: Remove a profile from devices (requires confirmation)
 
-#### Policy Management
-- **listPolicies**: List all policies in Jamf Pro
-- **getPolicyDetails**: Get detailed information about a specific policy by ID or name (includes scope, scripts with full content, and packages)
-- **searchPolicies**: Search for policies by name or ID (supports partial matching)
-- **executePolicy**: Run policies on specific devices (policy and device can be specified by ID or name, requires confirmation)
+### Package Management
+- **listPackages**: List all packages
+- **searchPackages**: Search packages by name
+- **getPackageDetails**: Detailed package information
+- **getPackageDeploymentHistory**: Deployment history via policy analysis
+- **getPoliciesUsingPackage**: Find all policies using a specific package
+- **getPackageDeploymentStats**: Deployment statistics and scope analysis
 
-#### Script Management
-- **deployScript**: Execute scripts for troubleshooting (with confirmation)
-- **getScriptDetails**: Get full script content and metadata including parameters, notes, and OS requirements
+### Computer Group Management
+- **listComputerGroups**: List groups (smart, static, or all)
+- **getComputerGroupDetails**: Group details including membership and smart group criteria
+- **searchComputerGroups**: Search groups by name
+- **getComputerGroupMembers**: List all members of a group
+- **createStaticComputerGroup**: Create a static group (requires confirmation)
+- **updateStaticComputerGroup**: Update group membership (requires confirmation)
+- **deleteComputerGroup**: Delete a group (requires confirmation)
 
-#### Configuration Profile Management
-- **listConfigurationProfiles**: List all configuration profiles (computer or mobile device)
-- **getConfigurationProfileDetails**: Get detailed information about a specific configuration profile
-- **searchConfigurationProfiles**: Search for configuration profiles by name
-- **deployConfigurationProfile**: Deploy a configuration profile to one or more devices (with confirmation)
-- **removeConfigurationProfile**: Remove a configuration profile from one or more devices (with confirmation)
+### Advanced Computer Searches
+- **listAdvancedComputerSearches**: List all saved advanced searches
+- **getAdvancedComputerSearchDetails**: Get search configuration and results
+- **createAdvancedComputerSearch**: Create a new advanced search (requires confirmation)
+- **deleteAdvancedComputerSearch**: Delete a saved search (requires confirmation)
 
-#### Package Management
-- **listPackages**: List all packages with name, version, category, and size
-- **getPackageDetails**: Get detailed package information including metadata, requirements, and notes
-- **searchPackages**: Search packages by name, filename, or category
-- **getPackageDeploymentHistory**: Get deployment history and statistics for a package
-- **getPoliciesUsingPackage**: Find all policies that use a specific package
+### Mobile Device Management
+- **searchMobileDevices**: Search mobile devices by name, serial, or UDID
+- **getMobileDeviceDetails**: Detailed mobile device information
+- **listMobileDevices**: List all mobile devices
+- **updateMobileDeviceInventory**: Force inventory update on a mobile device
+- **sendMDMCommand**: Send MDM commands — lock, wipe, clear passcode, lost mode, settings (requires confirmation)
+- **listMobileDeviceGroups**: List mobile device groups
+- **getMobileDeviceGroupDetails**: Group details including membership
 
-#### Computer Group Management
-- **listComputerGroups**: List computer groups (smart groups, static groups, or all)
-- **getComputerGroupDetails**: Get detailed information about a specific group including membership and smart group criteria
-- **searchComputerGroups**: Search for computer groups by name
-- **getComputerGroupMembers**: Get all members of a specific computer group
-- **createStaticComputerGroup**: Create a new static computer group with specified members (with confirmation)
-- **updateStaticComputerGroup**: Update the membership of a static computer group (with confirmation)
-- **deleteComputerGroup**: Delete a computer group (with confirmation)
+### Reporting & Analytics
+- **getInventorySummary**: Fleet inventory summary — device counts, OS distribution, model distribution
+- **getDeviceComplianceSummary**: Compliance summary — check-in rates, failed policies, missing software
+- **getPolicyComplianceReport**: Policy compliance — success/failure rates, scope coverage
+- **getSoftwareVersionReport**: Software version distribution across devices
+- **getPackageDeploymentStats**: Package deployment statistics and policy usage
 
-#### Mobile Device Management
-- **searchMobileDevices**: Search for mobile devices by name, serial number, UDID, or other criteria
-- **getMobileDeviceDetails**: Get detailed information about a specific mobile device including hardware, OS, battery, and management status
-- **listMobileDevices**: List all mobile devices in Jamf Pro with basic information
-- **updateMobileDeviceInventory**: Force an inventory update on a specific mobile device
-- **sendMDMCommand**: Send MDM commands to mobile devices (lock, wipe, clear passcode, etc.) with confirmation for destructive actions
-- **listMobileDeviceGroups**: List mobile device groups (smart groups, static groups, or all)
-- **getMobileDeviceGroupDetails**: Get detailed information about a specific mobile device group including membership and criteria
+### Buildings, Departments & Categories
+- **listBuildings** / **getBuildingDetails**: Organizational buildings for multi-site scoping
+- **listDepartments** / **getDepartmentDetails**: Departments for scoping and reporting
+- **listCategories** / **getCategoryDetails**: Categories for organizing policies, scripts, and profiles
 
-### Resources (Read-Only Data)
-- **jamf://inventory/computers**: Paginated device list
-- **jamf://inventory/mobile-devices**: Paginated mobile device list
-- **jamf://reports/compliance**: Security and patch compliance report
-- **jamf://reports/mobile-device-compliance**: Mobile device compliance report showing management status and issues
-- **jamf://reports/storage**: Disk usage analytics
-- **jamf://reports/os-versions**: OS version breakdown
+### Local Admin Password (LAPS)
+- **getLocalAdminPassword**: Retrieve the current LAPS password for a device (requires confirmation)
+- **getLocalAdminPasswordAudit**: Audit trail of password views and rotations
+- **getLocalAdminPasswordAccounts**: List LAPS-managed accounts on a device
 
-### Skills (ChatGPT Integration)
-Advanced multi-step operations powered by the skills system:
+### Patch Management
+- **listPatchSoftwareTitles**: List patch software title configurations
+- **getPatchSoftwareTitleDetails**: Patch title details with versions and definitions
+- **listPatchPolicies**: List patch policies with deployment status
+- **getPatchPolicyDashboard**: Patch compliance dashboard — latest version, pending, failed
+
+### Extension Attributes
+- **listComputerExtensionAttributes**: List all custom extension attributes
+- **getComputerExtensionAttributeDetails**: Full EA details including script content
+- **createComputerExtensionAttribute**: Create a new extension attribute (requires confirmation)
+- **updateComputerExtensionAttribute**: Update an extension attribute (requires confirmation)
+
+### Managed Software Updates
+- **listSoftwareUpdatePlans**: List active and completed OS update plans
+- **createSoftwareUpdatePlan**: Create an OS update plan for specific devices (requires confirmation)
+- **getSoftwareUpdatePlanDetails**: Update plan status and device progress
+
+### Enrollment Prestages
+- **listComputerPrestages** / **getComputerPrestageDetails** / **getComputerPrestageScope**: Computer enrollment prestage configuration and device assignments
+- **listMobilePrestages** / **getMobilePrestageDetails**: Mobile device enrollment prestages
+
+### Network Segments
+- **listNetworkSegments**: List network segments for location-based management
+- **getNetworkSegmentDetails**: Segment details including IP ranges and building assignment
+
+### Accounts & Users
+- **listAccounts** / **getAccountDetails** / **getAccountGroupDetails**: Jamf Pro admin accounts and groups with privileges
+- **listUsers** / **getUserDetails** / **searchUsers**: End-user records (not admin accounts)
+
+### App Installers
+- **listAppInstallers**: List Jamf App Catalog titles
+- **getAppInstallerDetails**: Detailed app installer information
+
+### Restricted Software
+- **listRestrictedSoftware**: List restricted software entries
+- **getRestrictedSoftwareDetails**: Restricted software configuration details
+
+### Webhooks
+- **listWebhooks**: List configured webhooks
+- **getWebhookDetails**: Webhook configuration details
+
+## Resources (12)
+
+| Resource URI | Description |
+|---|---|
+| `jamf://inventory/computers` | Paginated computer inventory |
+| `jamf://inventory/mobile-devices` | Paginated mobile device inventory |
+| `jamf://reports/compliance` | Security and patch compliance report |
+| `jamf://reports/mobile-device-compliance` | Mobile device compliance and management status |
+| `jamf://reports/storage` | Disk usage analytics |
+| `jamf://reports/os-versions` | OS version breakdown |
+| `jamf://reports/patch-compliance` | Fleet-wide patch compliance by software title |
+| `jamf://reports/encryption-status` | FileVault encryption compliance |
+| `jamf://reports/extension-attributes` | Extension attributes collection summary |
+| `jamf://inventory/prestages` | Enrollment prestage assignments overview |
+| `jamf://reports/failed-mdm-commands` | Devices with stuck or failed MDM commands |
+| `jamf://reports/laps-audit` | LAPS password access audit trail |
+
+## Prompts (12 Workflow Templates)
+
+| Prompt | Description |
+|---|---|
+| `troubleshoot-device` | Step-by-step device troubleshooting |
+| `deploy-software` | Software deployment workflow |
+| `compliance-check` | Comprehensive compliance reporting |
+| `mass-update` | Bulk device operations |
+| `storage-cleanup` | Disk space management |
+| `security-audit` | Full security posture audit — encryption, OS currency, compliance, failed policies |
+| `new-device-onboarding` | Verify new device enrollment — profiles, policies, group memberships |
+| `device-offboarding` | Device offboarding — unscope, wipe/lock, retire from inventory |
+| `software-update-review` | OS version distribution review and update planning |
+| `fleet-health-dashboard` | Comprehensive fleet health — devices, compliance, storage, OS, mobile |
+| `investigate-device-issue` | Deep device investigation — profiles, policies, groups, scripts |
+| `policy-rollout` | Staged policy rollout — clone, test group, verify, expand to production |
+
+## Skills (ChatGPT Integration)
+
+Advanced multi-step operations for the ChatGPT connector:
+
 - **skill_device_search**: Intelligent device search with natural language processing
 - **skill_find_outdated_devices**: Identify devices not checking in
 - **skill_batch_inventory_update**: Update multiple devices efficiently
 - **skill_deploy_policy_by_criteria**: Deploy policies based on device criteria
 - **skill_scheduled_compliance_check**: Automated compliance reporting
 
-### Prompts (Workflow Templates)
-- **troubleshoot-device**: Step-by-step device troubleshooting
-- **deploy-software**: Software deployment workflow
-- **compliance-check**: Comprehensive compliance reporting
-- **mass-update**: Bulk device operations
-- **storage-cleanup**: Disk space management
-
-## Installation
-
-### For ChatGPT Users
-See our detailed guides:
-- [**Quick Start Guide**](QUICK_START.md) - Fork and deploy in 5 minutes
-- [**Full Setup Guide**](CHATGPT_CONNECTOR_README.md) - Detailed setup instructions
-- [**POC Setup**](PROOF_OF_CONCEPT_SETUP.md) - Local development with tunnels
-- [**Architecture**](docs/CHATGPT_CONNECTOR_FLOW.md) - How it works
-- [**Deployment Guide**](docs/CHATGPT_DEPLOYMENT.md) - Production deployment
-
-### For Claude Desktop Users
-
-1. Clone this repository
-2. Install dependencies:
-   ```bash
-   cd jamf-mcp-server
-   npm install
-   ```
-3. Build the project:
-   ```bash
-   npm run build
-   ```
-
 ## Configuration
 
-### Setting up Jamf Pro API Authentication
+### Jamf Pro API Authentication
 
 1. In Jamf Pro, go to **Settings** > **System** > **API Roles and Clients**
 2. Create a new API Role with necessary permissions
-3. Create a new API Client:
-   - Assign the API Role you created
-   - Note the Client ID and generate a Client Secret
-4. Use these credentials in your environment variables
+3. Create a new API Client — note the Client ID and generate a Client Secret
 
 ### Claude Desktop Configuration
 
@@ -199,14 +252,11 @@ Add to your Claude Desktop config file:
   "mcpServers": {
     "jamf-pro": {
       "command": "node",
-      "args": ["/absolute/path/to/jamf-mcp-server/dist/index.js"],
+      "args": ["/absolute/path/to/jamf-mcp-server/dist/index-main.js"],
       "env": {
         "JAMF_URL": "https://your-instance.jamfcloud.com",
         "JAMF_CLIENT_ID": "your-api-client-id",
-        "JAMF_CLIENT_SECRET": "your-api-client-secret",
-        "JAMF_READ_ONLY": "false",
-        "JAMF_USE_ENHANCED_MODE": "true",
-        "JAMF_DEBUG_MODE": "false"
+        "JAMF_CLIENT_SECRET": "your-api-client-secret"
       }
     }
   }
@@ -215,237 +265,106 @@ Add to your Claude Desktop config file:
 
 ### ChatGPT Configuration
 
-For ChatGPT, you'll need to:
-1. Set up a tunnel (Cloudflare or ngrok)
-2. Configure the MCP connector in ChatGPT settings
-3. Add your server URL and authentication
-
 See [ChatGPT Connector Setup](CHATGPT_CONNECTOR_README.md) for detailed instructions.
 
-## Usage Examples
-
-> **Note**: Most tools support searching by both ID and name. When searching by name, partial matches are supported.
-
-### Natural Language Queries (ChatGPT)
-```
-"Find all devices that haven't checked in for 30 days"
-"Show me MacBooks with less than 10GB free space"
-"Search for iPads in the marketing department"
-"Get compliance statistics for our fleet"
-```
-
-### Direct Tool Usage (Claude Desktop)
-
-#### Search for a Device
-```
-Can you find John Smith's MacBook?
-Search for device GH-IT-0322
-Find devices with "Marketing" in the name
-```
-
-#### Check Device Details
-```
-Show me the details for device ID 123
-```
-
-#### Check Device Compliance
-```
-Show me all devices that haven't reported in 30 days
-```
-
-#### Policy Analysis
-```
-What packages are deployed by the 'Software Install' policy?
-Show me the scripts that run in the 'Weekly Maintenance' policy
-Get full details for policy 'macOS Updates' including all scripts and packages
-```
-
-#### Configuration Profile Management
-```
-List all computer configuration profiles
-Search for WiFi configuration profiles
-Deploy configuration profile ID 5 to devices 123, 456, and 789
-Remove mobile device configuration profile ID 10 from device 999
-```
-
-#### Package Management
-```
-List all packages
-Search for packages containing "Office"
-Get details for package ID 15
-Show me the deployment history for package ID 20
-Which policies use package ID 25?
-```
-
-#### Mobile Device Management
-```
-Search for iPads
-List all mobile devices
-Get details for mobile device ID 456
-Lock mobile device 123
-Enable Lost Mode on device 321
-```
-
-## 🏗️ Architecture
-
-### ChatGPT Integration
-```
-ChatGPT MCP Connector ↔️ Tunnel (Cloudflare/ngrok) ↔️ MCP Server ↔️ Jamf Pro API
-```
-
-### Claude Desktop Integration
-```
-Claude Desktop ↔️ MCP Server (local) ↔️ Jamf Pro API
-```
-
-## Safety Features
-
-- **Read-Only Mode**: Set `JAMF_READ_ONLY=true` to prevent any modifications
-- **Confirmation Required**: Destructive operations require explicit confirmation
-- **Error Handling**: Comprehensive error messages and recovery
-- **Rate Limiting**: Respects Jamf Pro API limits
-- **Audit Trail**: All operations are logged
-
-## Enhanced Error Handling (v1.1.0)
-
-The server includes comprehensive error handling and retry logic:
-
-### Features
-- **Automatic Retry**: Exponential backoff for transient failures
-- **Circuit Breaker**: Prevents cascading failures
-- **Enhanced Error Messages**: Detailed error information with actionable suggestions
-- **Request/Response Logging**: Debug mode for troubleshooting
-- **Rate Limiting**: Built-in rate limiter to prevent API throttling
-
-### Configuration
-Add these optional environment variables:
+### Enhanced Mode (Optional)
 
 ```json
 {
   "env": {
-    "JAMF_USE_ENHANCED_MODE": "true",      // Enable enhanced features (default: false)
-    "JAMF_MAX_RETRIES": "3",               // Max retry attempts (default: 3)
-    "JAMF_RETRY_DELAY": "1000",            // Initial retry delay in ms (default: 1000)
-    "JAMF_RETRY_MAX_DELAY": "10000",       // Max retry delay in ms (default: 10000)
-    "JAMF_DEBUG_MODE": "false",            // Enable debug logging (default: false)
-    "JAMF_ENABLE_RETRY": "true",           // Enable automatic retries (default: true)
-    "JAMF_ENABLE_RATE_LIMITING": "false",  // Enable rate limiting (default: false)
-    "JAMF_ENABLE_CIRCUIT_BREAKER": "false" // Enable circuit breaker (default: false)
+    "JAMF_USE_ENHANCED_MODE": "true",
+    "JAMF_MAX_RETRIES": "3",
+    "JAMF_RETRY_DELAY": "1000",
+    "JAMF_RETRY_MAX_DELAY": "10000",
+    "JAMF_DEBUG_MODE": "false",
+    "JAMF_ENABLE_RETRY": "true",
+    "JAMF_ENABLE_RATE_LIMITING": "false",
+    "JAMF_ENABLE_CIRCUIT_BREAKER": "false",
+    "JAMF_READ_ONLY": "false"
   }
 }
 ```
 
-## Development
-
-### Local Development Setup
-
-For local development, create a `.env` file:
+## Installation
 
 ```bash
-cp .env.example .env
-# Edit .env with your Jamf Pro credentials:
-# JAMF_URL=https://your-instance.jamfcloud.com
-# JAMF_CLIENT_ID=your-api-client-id
-# JAMF_CLIENT_SECRET=your-api-client-secret
-# JAMF_READ_ONLY=false
+git clone https://github.com/dbankscard/jamf-mcp-server.git
+cd jamf-mcp-server
+npm install
+npm run build
 ```
 
-### Running in Development Mode
+### Development
+
 ```bash
-npm run dev
+npm run dev          # Run in development mode
+npm run build:force  # Build without tests
+npm test             # Run tests
 ```
 
-### Testing with MCP Inspector
-```bash
-npm run inspector
-```
+## Security
 
-### Running Tests
-```bash
-npm test
-```
-
-## API Requirements
-
-This server requires:
-- Jamf Pro version 10.35.0 or later
-- API user with appropriate permissions
-- Network access to your Jamf Pro instance
+- **Read-Only Mode**: Set `JAMF_READ_ONLY=true` to prevent any modifications
+- **Confirmation Required**: All destructive operations require explicit `confirm: true`
+- **Tool Annotations**: Each tool declares `readOnlyHint` and `destructiveHint` for client-side safety
+- **OAuth2 Authentication**: Supports Jamf Pro API Client Credentials
+- **Rate Limiting**: Optional built-in rate limiter
+- **Circuit Breaker**: Optional circuit breaker for failure protection
 
 ### Recommended API Permissions
 
 For full functionality:
-- Read access to computers, policies, scripts, configuration profiles, packages, mobile devices
-- Update access for inventory updates
-- Execute access for policies and scripts
+- Read access to computers, policies, scripts, configuration profiles, packages, mobile devices, buildings, departments, categories, extension attributes, patch management, prestages, network segments, accounts, users, webhooks
+- LAPS password access (for LAPS tools)
+- Update access for inventory updates, policies, scripts, extension attributes
+- Execute access for policies, scripts, and MDM commands
 
 For read-only mode:
 - Read access to all resources only
 
-## 🛡️ Security Considerations
+## Architecture
 
-### For Production Use
-- Implement proper OAuth2 authentication (ChatGPT integration)
-- Deploy to a secure cloud environment
-- Use HTTPS with valid certificates
-- Enable rate limiting and access controls
-- Use read-only Jamf API credentials where possible
-- Store credentials securely (use environment variables)
-- Regularly rotate API credentials
-- Monitor API usage for anomalies
-- Implement IP allowlisting in Jamf Pro if possible
+```
+Claude Desktop  -->  MCP Server (stdio)  -->  Jamf Pro API
+ChatGPT         -->  Tunnel (Cloudflare)  -->  MCP Server (HTTP)  -->  Jamf Pro API
+```
 
-⚠️ **Note**: The ChatGPT POC uses development authentication for testing. For production use, implement proper security measures.
+The server uses a hybrid API client that supports both Jamf Pro Modern API (v1/v2/v3) and Classic API, with automatic fallback between them for maximum compatibility across Jamf Pro versions.
 
 ## Troubleshooting
 
 ### Authentication Issues
-- Verify your API credentials
-- Ensure the API user has the required permissions
-- Check network connectivity to Jamf Pro
+- Verify your API credentials (Client ID and Secret)
+- Ensure the API client has the required permissions
+- For Classic API endpoints, the server automatically uses Bearer tokens from OAuth2
 
-### Tool Execution Failures
-- Verify device IDs are correct
-- Ensure policies/scripts exist in Jamf Pro
-- Check that devices are online and managed
+### 503 Errors on Classic API
+- If using OAuth2 only (no username/password), ensure you're running v2.0+ which supports Bearer tokens on Classic API endpoints
 
-### Performance
-- Large inventory requests may take time
-- Use search filters to limit results
-- Consider implementing pagination for large datasets
+### Timeouts on Compound Tools
+- The default request timeout is 30 seconds
+- Compound tools like `getFleetOverview` make parallel API calls and may need more time on slower instances
 
-### ChatGPT Connection Issues
-- Ensure your tunnel is running (Cloudflare/ngrok)
-- Verify the MCP connector URL in ChatGPT settings
-- Check server logs for connection errors
+## Contributing
 
-## 🤝 Contributing
-
-Contributions are welcome! This project is designed to be forked and extended. Feel free to:
-- Add new MCP tools for different Jamf operations
-- Implement additional security features
-- Create connectors for other MDM systems
-- Improve ChatGPT integration
-- Share your improvements with the community
-
-Please:
+Contributions are welcome! Please:
 1. Fork the repository
 2. Create a feature branch
 3. Add tests for new functionality
 4. Submit a pull request
 
-## 📝 License
+## License
 
 MIT
 
-## 🔗 Resources
+## Resources
 
 - [Model Context Protocol Documentation](https://modelcontextprotocol.io/)
 - [Jamf Pro API Documentation](https://developer.jamf.com/)
 - [ChatGPT MCP Connectors](https://help.openai.com/en/articles/9824990-using-connectors-in-chatgpt)
 - [Claude Desktop MCP Servers](https://modelcontextprotocol.io/clients/claude)
 
-## 💬 Support
+## Support
 
 - [Create an Issue](https://github.com/dbankscard/jamf-mcp-server/issues)
 - [View Documentation](docs/)
@@ -453,4 +372,4 @@ MIT
 
 ---
 
-Built with ❤️ for the Jamf, Claude, and ChatGPT communities
+Built with the Jamf, Claude, and ChatGPT communities
