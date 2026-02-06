@@ -51,5 +51,5 @@ This POC uses development authentication. For production:
 - Implement proper OAuth2
 - Use HTTPS certificates
 - Deploy to a secure cloud environment
-- Use read-only Jamf API credentials
+- Use a read-only Jamf Pro API client
 EOF < /dev/null

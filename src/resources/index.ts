@@ -59,13 +59,13 @@ export function registerResources(server: Server, jamfClient: any): void {
       {
         uri: 'jamf://reports/extension-attributes',
         name: 'Extension Attributes Summary',
-        description: 'Summary of defined extension attributes and collection status',
+        description: 'Summary of defined Extension Attributes and collection status',
         mimeType: 'application/json',
       },
       {
         uri: 'jamf://inventory/prestages',
-        name: 'Enrollment Prestages',
-        description: 'Enrollment prestage assignments overview for computers and mobile devices',
+        name: 'PreStage Enrollments',
+        description: 'PreStage Enrollment assignments overview for computers and mobile devices',
         mimeType: 'application/json',
       },
       {
@@ -476,7 +476,7 @@ export function registerResources(server: Server, jamfClient: any): void {
               uri,
               mimeType: 'application/json',
               text: JSON.stringify({
-                error: `Failed to retrieve extension attributes: ${errorMessage}`,
+                error: `Failed to retrieve Extension Attributes: ${errorMessage}`,
                 hint: 'Ensure listComputerExtensionAttributes method is available on the Jamf client.',
                 generated: new Date().toISOString(),
               }, null, 2),

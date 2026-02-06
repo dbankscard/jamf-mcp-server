@@ -539,21 +539,21 @@ const GetPatchPolicyDashboardSchema = z.object({
 const ListComputerExtensionAttributesSchema = z.object({});
 
 const GetComputerExtensionAttributeDetailsSchema = z.object({
-  attributeId: z.string().describe('The extension attribute ID'),
+  attributeId: z.string().describe('The Extension Attribute ID'),
 });
 
 const CreateComputerExtensionAttributeSchema = z.object({
-  name: z.string().describe('Name of the extension attribute'),
-  description: z.string().optional().describe('Description of the extension attribute'),
+  name: z.string().describe('Name of the Extension Attribute'),
+  description: z.string().optional().describe('Description of the Extension Attribute'),
   dataType: z.string().optional().default('String').describe('Data type: String, Integer, or Date'),
   inputType: z.string().optional().default('script').describe('Input type: script, Text Field, or Pop-up Menu'),
-  scriptContents: z.string().optional().describe('Script content for script-type extension attributes'),
+  scriptContents: z.string().optional().describe('Script content for script-type Extension Attributes'),
   inventoryDisplay: z.string().optional().default('Extension Attributes').describe('Inventory display category'),
   confirm: z.boolean().optional().default(false).describe('Confirmation flag required to create'),
 });
 
 const UpdateComputerExtensionAttributeSchema = z.object({
-  attributeId: z.string().describe('The extension attribute ID to update'),
+  attributeId: z.string().describe('The Extension Attribute ID to update'),
   name: z.string().optional().describe('Updated name'),
   description: z.string().optional().describe('Updated description'),
   dataType: z.string().optional().describe('Updated data type'),
@@ -580,11 +580,11 @@ const GetSoftwareUpdatePlanDetailsSchema = z.object({
 const ListComputerPrestagesSchema = z.object({});
 
 const GetComputerPrestageDetailsSchema = z.object({
-  prestageId: z.string().describe('The computer prestage ID'),
+  prestageId: z.string().describe('The computer PreStage Enrollment ID'),
 });
 
 const GetComputerPrestageScopeSchema = z.object({
-  prestageId: z.string().describe('The computer prestage ID'),
+  prestageId: z.string().describe('The computer PreStage Enrollment ID'),
 });
 
 // Network Segments Schemas
@@ -598,7 +598,7 @@ const GetNetworkSegmentDetailsSchema = z.object({
 const ListMobilePrestagesSchema = z.object({});
 
 const GetMobilePrestageDetailsSchema = z.object({
-  prestageId: z.string().describe('The mobile device prestage ID'),
+  prestageId: z.string().describe('The mobile device PreStage Enrollment ID'),
 });
 
 // Accounts Schemas
@@ -2256,11 +2256,11 @@ export function registerTools(server: Server, jamfClient: any): void {
         annotations: { readOnlyHint: true, destructiveHint: false },
       },
       // ==========================================
-      // LAPS (Local Admin Password) Tools
+      // LAPS (Local Administrator Password Solution) Tools
       // ==========================================
       {
         name: 'getLocalAdminPassword',
-        description: 'Retrieve the current local admin password (LAPS) for a device. This is a sensitive security operation that requires confirmation.',
+        description: 'Retrieve the current LAPS password for a device. This is a sensitive security operation that requires confirmation.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -2377,7 +2377,7 @@ export function registerTools(server: Server, jamfClient: any): void {
       // ==========================================
       {
         name: 'listComputerExtensionAttributes',
-        description: 'List all computer extension attributes defined in Jamf Pro. Extension attributes collect custom data via scripts.',
+        description: 'List all computer Extension Attributes defined in Jamf Pro. Extension Attributes collect custom data via scripts.',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -2386,13 +2386,13 @@ export function registerTools(server: Server, jamfClient: any): void {
       },
       {
         name: 'getComputerExtensionAttributeDetails',
-        description: 'Get full details for a specific extension attribute including script content, data type, and inventory display settings',
+        description: 'Get full details for a specific Extension Attribute including script content, data type, and inventory display settings',
         inputSchema: {
           type: 'object',
           properties: {
             attributeId: {
               type: 'string',
-              description: 'The extension attribute ID',
+              description: 'The Extension Attribute ID',
             },
           },
           required: ['attributeId'],
@@ -2401,13 +2401,13 @@ export function registerTools(server: Server, jamfClient: any): void {
       },
       {
         name: 'createComputerExtensionAttribute',
-        description: 'Create a new computer extension attribute for custom data collection',
+        description: 'Create a new computer Extension Attribute for custom data collection',
         inputSchema: {
           type: 'object',
           properties: {
             name: {
               type: 'string',
-              description: 'Name of the extension attribute',
+              description: 'Name of the Extension Attribute',
             },
             description: {
               type: 'string',
@@ -2425,7 +2425,7 @@ export function registerTools(server: Server, jamfClient: any): void {
             },
             scriptContents: {
               type: 'string',
-              description: 'Script content for script-type extension attributes',
+              description: 'Script content for script-type Extension Attributes',
             },
             inventoryDisplay: {
               type: 'string',
@@ -2444,13 +2444,13 @@ export function registerTools(server: Server, jamfClient: any): void {
       },
       {
         name: 'updateComputerExtensionAttribute',
-        description: 'Update an existing computer extension attribute definition or script',
+        description: 'Update an existing computer Extension Attribute definition or script',
         inputSchema: {
           type: 'object',
           properties: {
             attributeId: {
               type: 'string',
-              description: 'The extension attribute ID to update',
+              description: 'The Extension Attribute ID to update',
             },
             name: {
               type: 'string',
@@ -2545,7 +2545,7 @@ export function registerTools(server: Server, jamfClient: any): void {
       // ==========================================
       {
         name: 'listComputerPrestages',
-        description: 'List all computer enrollment prestages in Jamf Pro for automated device enrollment configuration',
+        description: 'List all computer PreStage Enrollments in Jamf Pro for automated device enrollment configuration',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -2554,13 +2554,13 @@ export function registerTools(server: Server, jamfClient: any): void {
       },
       {
         name: 'getComputerPrestageDetails',
-        description: 'Get detailed configuration of a specific computer enrollment prestage',
+        description: 'Get detailed configuration of a specific computer PreStage Enrollment',
         inputSchema: {
           type: 'object',
           properties: {
             prestageId: {
               type: 'string',
-              description: 'The computer prestage ID',
+              description: 'The computer PreStage Enrollment ID',
             },
           },
           required: ['prestageId'],
@@ -2569,13 +2569,13 @@ export function registerTools(server: Server, jamfClient: any): void {
       },
       {
         name: 'getComputerPrestageScope',
-        description: 'Get the list of devices assigned to a specific computer enrollment prestage',
+        description: 'Get the list of devices assigned to a specific computer PreStage Enrollment',
         inputSchema: {
           type: 'object',
           properties: {
             prestageId: {
               type: 'string',
-              description: 'The computer prestage ID',
+              description: 'The computer PreStage Enrollment ID',
             },
           },
           required: ['prestageId'],
@@ -2616,7 +2616,7 @@ export function registerTools(server: Server, jamfClient: any): void {
       // ==========================================
       {
         name: 'listMobilePrestages',
-        description: 'List all mobile device enrollment prestages in Jamf Pro for automated mobile device enrollment',
+        description: 'List all mobile device PreStage Enrollments in Jamf Pro for automated mobile device enrollment',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -2625,13 +2625,13 @@ export function registerTools(server: Server, jamfClient: any): void {
       },
       {
         name: 'getMobilePrestageDetails',
-        description: 'Get detailed configuration of a specific mobile device enrollment prestage',
+        description: 'Get detailed configuration of a specific mobile device PreStage Enrollment',
         inputSchema: {
           type: 'object',
           properties: {
             prestageId: {
               type: 'string',
-              description: 'The mobile device prestage ID',
+              description: 'The mobile device PreStage Enrollment ID',
             },
           },
           required: ['prestageId'],
@@ -4555,7 +4555,7 @@ export function registerTools(server: Server, jamfClient: any): void {
         }
 
         // ==========================================
-        // LAPS (Local Admin Password) Tools
+        // LAPS (Local Administrator Password Solution) Tools
         // ==========================================
 
         case 'getLocalAdminPassword': {
@@ -4701,7 +4701,7 @@ export function registerTools(server: Server, jamfClient: any): void {
           if (!confirm) {
             const content: TextContent = {
               type: 'text',
-              text: 'Creating an extension attribute requires confirmation. Please set confirm: true to proceed.',
+              text: 'Creating an Extension Attribute requires confirmation. Please set confirm: true to proceed.',
             };
             return { content: [content] };
           }
@@ -4718,7 +4718,7 @@ export function registerTools(server: Server, jamfClient: any): void {
           const content: TextContent = {
             type: 'text',
             text: JSON.stringify({
-              message: `Successfully created extension attribute "${name}"`,
+              message: `Successfully created Extension Attribute "${name}"`,
               result,
             }, null, 2),
           };
@@ -4732,7 +4732,7 @@ export function registerTools(server: Server, jamfClient: any): void {
           if (!confirm) {
             const content: TextContent = {
               type: 'text',
-              text: 'Updating an extension attribute requires confirmation. Please set confirm: true to proceed.',
+              text: 'Updating an Extension Attribute requires confirmation. Please set confirm: true to proceed.',
             };
             return { content: [content] };
           }
@@ -4748,7 +4748,7 @@ export function registerTools(server: Server, jamfClient: any): void {
           const content: TextContent = {
             type: 'text',
             text: JSON.stringify({
-              message: `Successfully updated extension attribute ${attributeId}`,
+              message: `Successfully updated Extension Attribute ${attributeId}`,
               result,
             }, null, 2),
           };

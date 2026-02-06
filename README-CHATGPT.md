@@ -55,8 +55,8 @@ docker run -d \
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `JAMF_URL` | Jamf Pro instance URL | Yes |
-| `JAMF_CLIENT_ID` | Jamf API client ID | Yes* |
-| `JAMF_CLIENT_SECRET` | Jamf API client secret | Yes* |
+| `JAMF_CLIENT_ID` | Jamf Pro API client ID | Yes* |
+| `JAMF_CLIENT_SECRET` | Jamf Pro API client secret | Yes* |
 | `OAUTH_PROVIDER` | OAuth provider (auth0/okta) | Yes |
 | `AUTH0_DOMAIN` | Auth0 tenant domain | If auth0 |
 | `AUTH0_CLIENT_ID` | Auth0 application client ID | If auth0 |

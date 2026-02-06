@@ -80,7 +80,7 @@ Many tools return enriched responses with:
 ## Important Notes
 - All destructive tools require \`confirm: true\` parameter
 - Device identifiers can be Jamf IDs, serial numbers, or device names (compound tools resolve automatically)
-- The server supports both Jamf Pro Modern API and Classic API with automatic fallback`,
+- The server supports both the Jamf Pro API and Classic API with automatic fallback`,
   }
 );
 
@@ -93,10 +93,10 @@ async function run() {
     logger.info(`Jamf URL: ${JAMF_URL}`);
     logger.info('Authentication methods available:');
     if (hasOAuth2) {
-      logger.info(`  ✅ OAuth2 (Modern API) - Client ID: ${JAMF_CLIENT_ID}`);
+      logger.info(`  ✅ OAuth2 (Jamf Pro API) - Client ID: ${JAMF_CLIENT_ID}`);
     }
     if (hasBasicAuth) {
-      logger.info(`  ✅ Basic Auth (Classic API) - Username: ${JAMF_USERNAME}`);
+      logger.info(`  ✅ Basic Auth (Bearer Token) - Username: ${JAMF_USERNAME}`);
     }
     logger.info(`Read-only mode: ${READ_ONLY_MODE}`);
     logger.info('Skills integration: ✅ Enabled');
