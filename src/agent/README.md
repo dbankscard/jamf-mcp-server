@@ -182,7 +182,7 @@ The agent emits various events during operation:
 
 ## Examples
 
-See the `examples/agent-example.ts` file for a complete working example.
+See the `chatgpt/examples/agent-example.ts` file for a complete working example.
 
 ## Safety Considerations
 
