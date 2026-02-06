@@ -49,7 +49,7 @@ See our [ChatGPT Quick Start Guide](chatgpt/QUICK_START.md) for 5-minute setup.
 
 Ask natural language questions about your Jamf fleet:
 - "How is my fleet doing?" — uses `getFleetOverview` for a single-call summary
-- "Tell me about CORP-ADM-0228" — uses `getDeviceFullProfile` to resolve by name, serial, or ID
+- "Tell me about LAPTOP-001" — uses `getDeviceFullProfile` to resolve by name, serial, or ID
 - "What's our security posture?" — uses `getSecurityPosture` for encryption and compliance analysis
 - "How is the Software Install policy performing?" — uses `getPolicyAnalysis` with auto-resolve by name
 - "Find all devices that haven't checked in for 30 days"
