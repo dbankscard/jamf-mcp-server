@@ -80,9 +80,9 @@ Test your Jamf API directly:
 
 ```bash
 # Test with self-signed certificate (-k flag)
-curl -k https://jss.globalhc.io:8443/api/v1/auth/token \
+curl -k https://your-instance.jamfcloud.com/api/v1/auth/token \
   -H "Accept: application/json" \
-  -u "api:@p!2040"
+  -u "your-username:your-password"
 ```
 
 ## Claude Desktop Console
@@ -106,10 +106,10 @@ Ensure your firewall allows:
 Test network connectivity:
 ```bash
 # Test if host is reachable
-ping jss.globalhc.io
+ping your-instance.jamfcloud.com
 
 # Test if port is open
-nc -zv jss.globalhc.io 8443
+nc -zv your-instance.jamfcloud.com 443
 ```
 
 ## Rebuilding After Changes

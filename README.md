@@ -1,4 +1,4 @@
-# Jamf Pro MCP Server
+# Jamf Pro MCP Server v2.0
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
@@ -11,6 +11,16 @@
 A comprehensive MCP (Model Context Protocol) server that enables AI assistants to interact with Jamf Pro for complete Apple device management. Works with Claude Desktop, Cody, and **ChatGPT** (via MCP Connectors).
 
 **103 tools** | **12 resources** | **12 workflow prompts** | **5 skills**
+
+### What's New in v2.0
+
+- **103 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
+- **12 resources** — all returning live data including compliance, storage, OS versions, encryption, and patch reports
+- **12 workflow prompts** — guided templates for common admin tasks like onboarding, offboarding, security audits, and staged rollouts
+- **Compound tools** — single-call operations like `getFleetOverview`, `getDeviceFullProfile`, `getSecurityPosture`, and `getPolicyAnalysis` that combine multiple API calls behind the scenes
+- **Bearer Token authentication on Classic API** — full OAuth2 Client Credentials support without needing a username/password
+- **Parallel API calls** — batch operations and compound tools run requests concurrently for faster results
+- **Correct Jamf terminology** — all documentation and tool descriptions align with official Jamf developer documentation
 
 ![Tests](https://github.com/dbankscard/jamf-mcp-server/actions/workflows/test.yml/badge.svg)
 
