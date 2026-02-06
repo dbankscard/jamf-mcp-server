@@ -153,8 +153,8 @@ Most cloud platforms provide SSL certificates automatically. If not:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `JAMF_URL` | Your Jamf Pro instance URL | `https://company.jamfcloud.com` |
-| `JAMF_CLIENT_ID` | Jamf API client ID | `abc123...` |
-| `JAMF_CLIENT_SECRET` | Jamf API client secret | `xyz789...` |
+| `JAMF_CLIENT_ID` | Jamf Pro API client ID | `abc123...` |
+| `JAMF_CLIENT_SECRET` | Jamf Pro API client secret | `xyz789...` |
 | `OAUTH_PROVIDER` | OAuth provider type | `auth0` or `okta` |
 | `AUTH0_DOMAIN` | Auth0 tenant domain | `your-tenant.auth0.com` |
 | `AUTH0_CLIENT_ID` | OAuth client ID | `def456...` |
@@ -188,7 +188,7 @@ Most cloud platforms provide SSL certificates automatically. If not:
 
 ## Security Considerations
 
-1. **API Keys**: Never expose Jamf API credentials in client-side code
+1. **API Keys**: Never expose Jamf Pro API credentials in client-side code
 2. **OAuth Scopes**: Limit scopes to minimum required permissions
 3. **CORS**: Only allow origins from OpenAI domains
 4. **Rate Limiting**: Consider implementing rate limiting for production

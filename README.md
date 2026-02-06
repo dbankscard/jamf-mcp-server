@@ -143,7 +143,7 @@ These combine multiple API calls into a single operation:
 - **listDepartments** / **getDepartmentDetails**: Departments for scoping and reporting
 - **listCategories** / **getCategoryDetails**: Categories for organizing policies, scripts, and profiles
 
-### Local Admin Password (LAPS)
+### Local Administrator Password Solution (LAPS)
 - **getLocalAdminPassword**: Retrieve the current LAPS password for a device (requires confirmation)
 - **getLocalAdminPasswordAudit**: Audit trail of password views and rotations
 - **getLocalAdminPasswordAccounts**: List LAPS-managed accounts on a device
@@ -165,9 +165,9 @@ These combine multiple API calls into a single operation:
 - **createSoftwareUpdatePlan**: Create an OS update plan for specific devices (requires confirmation)
 - **getSoftwareUpdatePlanDetails**: Update plan status and device progress
 
-### Enrollment Prestages
-- **listComputerPrestages** / **getComputerPrestageDetails** / **getComputerPrestageScope**: Computer enrollment prestage configuration and device assignments
-- **listMobilePrestages** / **getMobilePrestageDetails**: Mobile device enrollment prestages
+### PreStage Enrollments
+- **listComputerPrestages** / **getComputerPrestageDetails** / **getComputerPrestageScope**: Computer PreStage Enrollment configuration and device assignments
+- **listMobilePrestages** / **getMobilePrestageDetails**: Mobile device PreStage Enrollments
 
 ### Network Segments
 - **listNetworkSegments**: List network segments for location-based management
@@ -201,8 +201,8 @@ These combine multiple API calls into a single operation:
 | `jamf://reports/os-versions` | OS version breakdown |
 | `jamf://reports/patch-compliance` | Fleet-wide patch compliance by software title |
 | `jamf://reports/encryption-status` | FileVault encryption compliance |
-| `jamf://reports/extension-attributes` | Extension attributes collection summary |
-| `jamf://inventory/prestages` | Enrollment prestage assignments overview |
+| `jamf://reports/extension-attributes` | Extension Attributes collection summary |
+| `jamf://inventory/prestages` | PreStage Enrollment assignments overview |
 | `jamf://reports/failed-mdm-commands` | Devices with stuck or failed MDM commands |
 | `jamf://reports/laps-audit` | LAPS password access audit trail |
 
@@ -307,14 +307,14 @@ npm test             # Run tests
 - **Read-Only Mode**: Set `JAMF_READ_ONLY=true` to prevent any modifications
 - **Confirmation Required**: All destructive operations require explicit `confirm: true`
 - **Tool Annotations**: Each tool declares `readOnlyHint` and `destructiveHint` for client-side safety
-- **OAuth2 Authentication**: Supports Jamf Pro API Client Credentials
+- **Client Credentials Authentication**: Supports Jamf Pro API roles and clients
 - **Rate Limiting**: Optional built-in rate limiter
 - **Circuit Breaker**: Optional circuit breaker for failure protection
 
 ### Recommended API Permissions
 
 For full functionality:
-- Read access to computers, policies, scripts, configuration profiles, packages, mobile devices, buildings, departments, categories, extension attributes, patch management, prestages, network segments, accounts, users, webhooks
+- Read access to computers, policies, scripts, configuration profiles, packages, mobile devices, buildings, departments, categories, Extension Attributes, Patch Management, PreStage Enrollments, network segments, accounts, users, webhooks
 - LAPS password access (for LAPS tools)
 - Update access for inventory updates, policies, scripts, extension attributes
 - Execute access for policies, scripts, and MDM commands
@@ -329,17 +329,17 @@ Claude Desktop  -->  MCP Server (stdio)  -->  Jamf Pro API
 ChatGPT         -->  Tunnel (Cloudflare)  -->  MCP Server (HTTP)  -->  Jamf Pro API
 ```
 
-The server uses a hybrid API client that supports both Jamf Pro Modern API (v1/v2/v3) and Classic API, with automatic fallback between them for maximum compatibility across Jamf Pro versions.
+The server uses a hybrid API client that supports both the Jamf Pro API and Classic API, with automatic fallback between them for maximum compatibility across Jamf Pro versions.
 
 ## Troubleshooting
 
 ### Authentication Issues
 - Verify your API credentials (Client ID and Secret)
 - Ensure the API client has the required permissions
-- For Classic API endpoints, the server automatically uses Bearer tokens from OAuth2
+- For Classic API endpoints, the server automatically uses Bearer Token authentication
 
 ### 503 Errors on Classic API
-- If using OAuth2 only (no username/password), ensure you're running v2.0+ which supports Bearer tokens on Classic API endpoints
+- If using Client Credentials only (no username/password), ensure you're running v2.0+ which supports Bearer Token authentication on Classic API endpoints
 
 ### Timeouts on Compound Tools
 - The default request timeout is 30 seconds
@@ -372,4 +372,4 @@ MIT
 
 ---
 
-Built with the Jamf, Claude, and ChatGPT communities
+Built with ❤️ for the Jamf, Claude, and ChatGPT communities

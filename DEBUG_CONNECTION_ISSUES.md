@@ -18,7 +18,7 @@ This allows connections to Jamf Pro instances with self-signed certificates.
 ### 2. Authentication Failures
 
 The server supports two authentication methods:
-- **OAuth2 (Modern API)**: Uses client credentials flow
+- **OAuth2 (Jamf Pro API)**: Uses Client Credentials flow
 - **Basic Auth**: For getting bearer tokens (Classic API)
 
 Check your `.env` file has the correct credentials:
@@ -32,7 +32,7 @@ JAMF_PASSWORD=your-password
 
 ### 3. API Search Filter Syntax (Fixed)
 
-The Modern API search was using incorrect filter syntax. The correct syntax is:
+The Jamf Pro API search was using incorrect filter syntax. The correct syntax is:
 - `=~` for contains/partial match
 - `or` for combining multiple conditions
 
@@ -58,7 +58,7 @@ node test-jamf-connection.js
 This script will:
 1. Test OAuth2 authentication
 2. Test Basic Auth
-3. Verify Modern API access
+3. Verify Jamf Pro API access
 4. Verify Classic API access
 5. Test search functionality with correct filter syntax
 
@@ -94,7 +94,7 @@ To view MCP server logs in Claude Desktop:
 
 Common log patterns:
 - `✅ OAuth2 token obtained successfully` - Good authentication
-- `Modern API search failed: Request failed with status code 400` - Bad request (usually filter syntax)
+- `Jamf Pro API search failed: Request failed with status code 400` - Bad request (usually filter syntax)
 - `Searching computers using Classic API...` - Fallback to Classic API
 
 ## Firewall and Network Issues
@@ -136,7 +136,7 @@ npm run serve
 
 2. **Check API permissions** in Jamf Pro:
    - Ensure your API client has necessary permissions
-   - Verify OAuth2 scopes are correctly configured
+   - Verify API roles and clients are correctly configured
 
 3. **Test individual endpoints**:
    - Start with simple endpoints like `/api/v1/jamf-pro-version`

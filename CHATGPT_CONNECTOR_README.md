@@ -14,7 +14,7 @@ Connect ChatGPT to your Jamf Pro instance using the Model Context Protocol (MCP)
 ### Prerequisites
 
 - Node.js 18+ installed
-- Jamf Pro instance with API credentials
+- Jamf Pro instance with API roles and clients configured
 - ChatGPT Plus subscription (for MCP Connectors)
 - Cloudflare or ngrok account (for tunneling)
 
@@ -143,7 +143,7 @@ For production use:
 2. Use HTTPS with valid certificates
 3. Restrict CORS origins
 4. Enable rate limiting
-5. Use read-only Jamf API credentials
+5. Use a read-only API client
 6. Deploy to a secure cloud environment
 
 ## Important Notes

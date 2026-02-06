@@ -5,7 +5,7 @@ This guide shows you how to quickly set up the Jamf MCP Server as a ChatGPT conn
 ## Prerequisites
 
 - Node.js 18+ installed
-- Jamf Pro instance with API credentials
+- Jamf Pro instance with API roles and clients configured
 - ChatGPT Plus subscription (for MCP Connectors)
 - Cloudflare or ngrok for tunneling
 
@@ -128,7 +128,7 @@ The server implements the MCP protocol with JSON-RPC, allowing ChatGPT to:
 
 - Development authentication is enabled (no real auth required)
 - Tunnel exposes your local server to the internet
-- Use read-only Jamf API credentials if possible
+- Use a read-only Jamf Pro API client if possible
 - Don't leave the tunnel running when not testing
 
 For production:

@@ -101,7 +101,7 @@ The CI pipeline tests against multiple Node.js versions (18.x, 20.x, 22.x) to en
 3. Run tests in verbose mode to see details: `VERBOSE=true npm test`
 
 ### Mock Data
-The test suite uses mock Jamf API responses defined in `test-all-skills.js`. If you need to test with different data scenarios, modify the `mockDevices`, `mockPolicies`, or other mock data structures.
+The test suite uses mock Jamf Pro API responses defined in `test-all-skills.js`. If you need to test with different data scenarios, modify the `mockDevices`, `mockPolicies`, or other mock data structures.
 
 ### Adding New Tools
 If your skill uses a new tool, add it to the `createMockContext` function:

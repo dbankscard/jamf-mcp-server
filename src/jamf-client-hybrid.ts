@@ -11,7 +11,7 @@ const agentPool = getDefaultAgentPool();
 
 export interface JamfApiClientConfig {
   baseUrl: string;
-  // OAuth2 credentials (for Modern API)
+  // OAuth2 credentials (for Jamf Pro API)
   clientId?: string;
   clientSecret?: string;
   // Basic Auth credentials (for getting Bearer token)
@@ -47,7 +47,7 @@ export type Computer = z.infer<typeof ComputerSchema>;
 
 /**
  * Hybrid Jamf API Client that uses the correct authentication methods:
- * 1. OAuth2 client credentials for Modern API token
+ * 1. OAuth2 Client Credentials for Jamf Pro API token
  * 2. Basic Auth to get Bearer token (which works on Classic API)
  * 3. Intelligent fallback to whichever method works
  */
@@ -110,7 +110,7 @@ export class JamfApiClientHybrid {
           config.headers['Authorization'] = `Bearer ${this.bearerToken.token}`;
         }
       } else {
-        // Modern API endpoints use Bearer token
+        // Jamf Pro API endpoints use Bearer token
         if (this.bearerTokenAvailable && this.bearerToken) {
           config.headers['Authorization'] = `Bearer ${this.bearerToken.token}`;
         } else if (this.oauth2Available && this.oauth2Token) {
@@ -157,7 +157,7 @@ export class JamfApiClientHybrid {
   }
 
   /**
-   * Get OAuth2 token using client credentials flow
+   * Get OAuth2 token using Client Credentials flow
    */
   private async getOAuth2Token(): Promise<void> {
     if (!this.hasOAuth2) return;
@@ -236,7 +236,7 @@ export class JamfApiClientHybrid {
    * Ensure we have a valid token
    */
   private async ensureAuthenticated(): Promise<void> {
-    // Try Bearer token from Basic Auth first (it works on Modern API)
+    // Try Bearer token from Basic Auth first (it works on Jamf Pro API)
     if (this.hasBasicAuth) {
       if (!this.bearerToken || this.bearerToken.expires <= new Date()) {
         await this.getBearerTokenWithBasicAuth();
@@ -265,12 +265,12 @@ export class JamfApiClientHybrid {
     
     logger.info('\nTesting API access:');
     
-    // Test Modern API
+    // Test Jamf Pro API
     try {
       await this.axiosInstance.get('/api/v1/auth');
-      logger.info('  ✅ Modern API: Accessible');
+      logger.info('  ✅ Jamf Pro API: Accessible');
     } catch (error) {
-      logger.warn('Modern API not accessible', { 
+      logger.warn('Jamf Pro API not accessible', { 
         error: error instanceof Error ? error.message : String(error),
         endpoint: '/api/v1/jamf-pro-server-url'
       });
@@ -309,12 +309,12 @@ export class JamfApiClientHybrid {
 
   /**
    * Get total computer count without fetching all records.
-   * Uses Modern API page-size=1 to read totalCount, falls back to Classic API.
+   * Uses Jamf Pro API page-size=1 to read totalCount, falls back to Classic API.
    */
   async getComputerCount(): Promise<number> {
     await this.ensureAuthenticated();
 
-    // Try Modern API first — returns { totalCount, results }
+    // Try Jamf Pro API first — returns { totalCount, results }
     try {
       const response = await this.axiosInstance.get('/api/v1/computers-inventory', {
         params: { 'page-size': 1 },
@@ -323,7 +323,7 @@ export class JamfApiClientHybrid {
         return response.data.totalCount;
       }
     } catch (error) {
-      logger.debug('Modern API count failed, falling back to Classic API', {
+      logger.debug('Jamf Pro API count failed, falling back to Classic API', {
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -351,9 +351,9 @@ export class JamfApiClientHybrid {
   private async _searchComputersImpl(query: string, limit: number): Promise<Computer[]> {
     await this.ensureAuthenticated();
 
-    // Try Modern API first
+    // Try Jamf Pro API first
     try {
-      logger.info('Searching computers using Modern API...');
+      logger.info('Searching computers using Jamf Pro API...');
       const params: Record<string, string | number> = {
         'page-size': limit,
       };
@@ -385,9 +385,9 @@ export class JamfApiClientHybrid {
     } catch (error) {
       const axiosError = error as AxiosError;
       if (axiosError.response?.status === 403) {
-        logger.info('Modern API search returned 403, trying Classic API...');
+        logger.info('Jamf Pro API search returned 403, trying Classic API...');
       } else {
-        logger.debug('Modern API search failed, falling back to Classic API', {
+        logger.debug('Jamf Pro API search failed, falling back to Classic API', {
           error: error instanceof Error ? error.message : String(error),
           status: axiosError.response?.status
         });
@@ -492,14 +492,14 @@ export class JamfApiClientHybrid {
   private async _getComputerDetailsImpl(id: string): Promise<any> {
     await this.ensureAuthenticated();
     
-    // Try Modern API first
+    // Try Jamf Pro API first
     try {
-      logger.info(`Getting computer details for ${id} using Modern API...`);
+      logger.info(`Getting computer details for ${id} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/computers-inventory-detail/${id}`);
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError;
-      logger.debug('Modern API computer details failed, falling back to Classic API', {
+      logger.debug('Jamf Pro API computer details failed, falling back to Classic API', {
         status: axiosError.response?.status,
         error: error instanceof Error ? error.message : String(error),
         computerId: id
@@ -595,14 +595,14 @@ export class JamfApiClientHybrid {
     
     await this.ensureAuthenticated();
     
-    // Try Modern API first
+    // Try Jamf Pro API first
     try {
-      // Modern API uses management commands endpoint
+      // Jamf Pro API uses management commands endpoint
       await this.axiosInstance.post(`/api/v1/jamf-management-framework/redeploy/${deviceId}`);
-      logger.info(`Inventory update requested for device ${deviceId} via Modern API`);
+      logger.info(`Inventory update requested for device ${deviceId} via Jamf Pro API`);
     } catch (error) {
       if (getAxiosErrorStatus(error) === 404 || getAxiosErrorStatus(error) === 403) {
-        logger.info('Modern API failed, trying Classic API computercommands...');
+        logger.info('Jamf Pro API failed, trying Classic API computercommands...');
         // Try Classic API using the correct endpoint
         try {
           await this.axiosInstance.post(`/JSSResource/computercommands/command/UpdateInventory`, {
@@ -686,14 +686,14 @@ export class JamfApiClientHybrid {
     
     await this.ensureAuthenticated();
     
-    // Try Modern API first
+    // Try Jamf Pro API first
     try {
-      logger.info('Creating policy using Modern API...');
+      logger.info('Creating policy using Jamf Pro API...');
       logger.info('Policy data:', JSON.stringify(policyData, null, 2));
       const response = await this.axiosInstance.post('/api/v1/policies', policyData);
       return response.data;
     } catch (error) {
-      logger.info(`Modern API failed with status ${getAxiosErrorStatus(error)}, trying Classic API...`);
+      logger.info(`Jamf Pro API failed with status ${getAxiosErrorStatus(error)}, trying Classic API...`);
       logger.info('Error details:', getAxiosErrorData(error));
       // Fall back to Classic API for any error
     }
@@ -744,13 +744,13 @@ export class JamfApiClientHybrid {
     
     await this.ensureAuthenticated();
     
-    // Try Modern API first
+    // Try Jamf Pro API first
     try {
-      logger.info(`Updating policy ${policyId} using Modern API...`);
+      logger.info(`Updating policy ${policyId} using Jamf Pro API...`);
       const response = await this.axiosInstance.put(`/api/v1/policies/${policyId}`, policyData);
       return response.data;
     } catch (error) {
-      logger.info(`Modern API failed with status ${getAxiosErrorStatus(error)}, trying Classic API...`);
+      logger.info(`Jamf Pro API failed with status ${getAxiosErrorStatus(error)}, trying Classic API...`);
       logger.info('Error details:', getAxiosErrorData(error));
       // Fall back to Classic API for any error
     }
@@ -1050,13 +1050,13 @@ export class JamfApiClientHybrid {
   async getScriptDetails(scriptId: string): Promise<any> {
     await this.ensureAuthenticated();
     
-    // Try Modern API first
+    // Try Jamf Pro API first
     try {
-      logger.info(`Getting script details for ${scriptId} using Modern API...`);
+      logger.info(`Getting script details for ${scriptId} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/scripts/${scriptId}`);
       return response.data;
     } catch (error) {
-      logger.info(`Modern API failed with status ${getAxiosErrorStatus(error)}, trying Classic API...`);
+      logger.info(`Jamf Pro API failed with status ${getAxiosErrorStatus(error)}, trying Classic API...`);
       // Fall back to Classic API for any error
     }
     
@@ -1105,8 +1105,8 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
     
     try {
-      // Try Modern API first
-      logger.info(`Listing ${type} configuration profiles using Modern API...`);
+      // Try Jamf Pro API first
+      logger.info(`Listing ${type} configuration profiles using Jamf Pro API...`);
       const endpoint = type === 'computer' 
         ? '/api/v2/computer-configuration-profiles' 
         : '/api/v2/mobile-device-configuration-profiles';
@@ -1114,7 +1114,7 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(endpoint);
       return response.data.results || [];
     } catch (error) {
-      logger.info(`Modern API failed, trying Classic API...`);
+      logger.info(`Jamf Pro API failed, trying Classic API...`);
       
       // Fall back to Classic API
       try {
@@ -1148,8 +1148,8 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
     
     try {
-      // Try Modern API first
-      logger.info(`Getting ${type} configuration profile ${profileId} using Modern API...`);
+      // Try Jamf Pro API first
+      logger.info(`Getting ${type} configuration profile ${profileId} using Jamf Pro API...`);
       const endpoint = type === 'computer'
         ? `/api/v2/computer-configuration-profiles/${profileId}`
         : `/api/v2/mobile-device-configuration-profiles/${profileId}`;
@@ -1157,7 +1157,7 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(endpoint);
       return response.data;
     } catch (error) {
-      logger.info(`Modern API failed, trying Classic API...`);
+      logger.info(`Jamf Pro API failed, trying Classic API...`);
       
       // Fall back to Classic API
       try {
@@ -1215,8 +1215,8 @@ export class JamfApiClientHybrid {
     const profile = await this.getConfigurationProfileDetails(profileId, type);
     
     try {
-      // Modern API approach - update the profile scope
-      logger.info(`Deploying ${type} configuration profile ${profileId} using Modern API...`);
+      // Jamf Pro API approach - update the profile scope
+      logger.info(`Deploying ${type} configuration profile ${profileId} using Jamf Pro API...`);
       
       const endpoint = type === 'computer'
         ? `/api/v2/computer-configuration-profiles/${profileId}`
@@ -1241,7 +1241,7 @@ export class JamfApiClientHybrid {
       await this.axiosInstance.put(endpoint, updatePayload);
       logger.info(`Successfully deployed profile ${profileId} to ${deviceIds.length} ${type}(s)`);
     } catch (error) {
-      logger.info(`Modern API failed, trying Classic API...`);
+      logger.info(`Jamf Pro API failed, trying Classic API...`);
       
       // Fall back to Classic API
       try {
@@ -1287,8 +1287,8 @@ export class JamfApiClientHybrid {
     const profile = await this.getConfigurationProfileDetails(profileId, type);
     
     try {
-      // Modern API approach - update the profile scope
-      logger.info(`Removing ${type} configuration profile ${profileId} using Modern API...`);
+      // Jamf Pro API approach - update the profile scope
+      logger.info(`Removing ${type} configuration profile ${profileId} using Jamf Pro API...`);
       
       const endpoint = type === 'computer'
         ? `/api/v2/computer-configuration-profiles/${profileId}`
@@ -1313,7 +1313,7 @@ export class JamfApiClientHybrid {
       await this.axiosInstance.put(endpoint, updatePayload);
       logger.info(`Successfully removed profile ${profileId} from ${deviceIds.length} ${type}(s)`);
     } catch (error) {
-      logger.info(`Modern API failed, trying Classic API...`);
+      logger.info(`Jamf Pro API failed, trying Classic API...`);
       
       // Fall back to Classic API
       try {
@@ -1354,7 +1354,7 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
     
     // Packages are only available through Classic API
-    // Modern API doesn't have a packages endpoint
+    // Jamf Pro API doesn't have a packages endpoint
     try {
       logger.info('Listing packages using Classic API...');
       const response = await this.axiosInstance.get('/JSSResource/packages');
@@ -1596,8 +1596,8 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
     
     try {
-      // Try Modern API first
-      logger.info(`Creating static computer group "${name}" using Modern API...`);
+      // Try Jamf Pro API first
+      logger.info(`Creating static computer group "${name}" using Jamf Pro API...`);
       
       const payload = {
         name: name,
@@ -1608,7 +1608,7 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.post('/api/v1/computer-groups', payload);
       return response.data;
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
       
       // Fall back to Classic API
       try {
@@ -1701,12 +1701,12 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
     
     try {
-      // Try Modern API first
-      logger.info(`Deleting computer group ${groupId} using Modern API...`);
+      // Try Jamf Pro API first
+      logger.info(`Deleting computer group ${groupId} using Jamf Pro API...`);
       await this.axiosInstance.delete(`/api/v1/computer-groups/${groupId}`);
       logger.info(`Successfully deleted computer group ${groupId}`);
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
       
       // Fall back to Classic API
       try {
@@ -1725,9 +1725,9 @@ export class JamfApiClientHybrid {
   async searchMobileDevices(query: string, limit: number = 100): Promise<any[]> {
     await this.ensureAuthenticated();
     
-    // Try Modern API first
+    // Try Jamf Pro API first
     try {
-      logger.info('Searching mobile devices using Modern API...');
+      logger.info('Searching mobile devices using Jamf Pro API...');
       const response = await this.axiosInstance.get('/api/v2/mobile-devices', {
         params: {
           'page-size': limit,
@@ -1737,7 +1737,7 @@ export class JamfApiClientHybrid {
       
       return response.data.results || [];
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
     }
     
     // Try Classic API
@@ -1764,13 +1764,13 @@ export class JamfApiClientHybrid {
   async getMobileDeviceDetails(deviceId: string): Promise<any> {
     await this.ensureAuthenticated();
     
-    // Try Modern API first
+    // Try Jamf Pro API first
     try {
-      logger.info(`Getting mobile device details for ${deviceId} using Modern API...`);
+      logger.info(`Getting mobile device details for ${deviceId} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v2/mobile-devices/${deviceId}/detail`);
       return response.data;
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
     }
     
     // Try Classic API
@@ -1801,13 +1801,13 @@ export class JamfApiClientHybrid {
     
     await this.ensureAuthenticated();
     
-    // Try Modern API first
+    // Try Jamf Pro API first
     try {
-      logger.info(`Updating mobile device inventory for ${deviceId} using Modern API...`);
+      logger.info(`Updating mobile device inventory for ${deviceId} using Jamf Pro API...`);
       await this.axiosInstance.post(`/api/v2/mobile-devices/${deviceId}/update-inventory`);
       logger.info(`Mobile device inventory update requested for device ${deviceId}`);
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
       
       // Try Classic API using MDM commands
       try {
@@ -1880,11 +1880,11 @@ export class JamfApiClientHybrid {
       throw new Error(`Invalid MDM command: ${command}. Valid commands are: ${validCommands.join(', ')}`);
     }
     
-    // Try Modern API first
+    // Try Jamf Pro API first
     try {
-      logger.info(`Sending MDM command '${command}' to mobile device ${deviceId} using Modern API...`);
+      logger.info(`Sending MDM command '${command}' to mobile device ${deviceId} using Jamf Pro API...`);
       
-      // Modern API uses different endpoints for different commands
+      // Jamf Pro API uses different endpoints for different commands
       if (command === 'DeviceLock') {
         await this.axiosInstance.post(`/api/v2/mobile-devices/${deviceId}/lock`);
       } else if (command === 'EraseDevice') {
@@ -1900,7 +1900,7 @@ export class JamfApiClientHybrid {
       
       logger.info(`Successfully sent MDM command '${command}' to device ${deviceId}`);
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
       
       // Try Classic API
       try {
@@ -2161,8 +2161,8 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
     
     try {
-      // Try Modern API first
-      logger.info(`Listing mobile device groups (${type}) using Modern API...`);
+      // Try Jamf Pro API first
+      logger.info(`Listing mobile device groups (${type}) using Jamf Pro API...`);
       const response = await this.axiosInstance.get('/api/v1/mobile-device-groups', {
         params: {
           'page-size': 1000,
@@ -2178,7 +2178,7 @@ export class JamfApiClientHybrid {
       
       return groups;
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
       
       // Fall back to Classic API
       try {
@@ -2217,12 +2217,12 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
     
     try {
-      // Try Modern API first
-      logger.info(`Getting mobile device group ${groupId} details using Modern API...`);
+      // Try Jamf Pro API first
+      logger.info(`Getting mobile device group ${groupId} details using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/mobile-device-groups/${groupId}`);
       return response.data;
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
       
       // Fall back to Classic API
       try {
@@ -3229,7 +3229,7 @@ export class JamfApiClientHybrid {
     }
 
     try {
-      logger.info(`Sending MDM command '${command}' to computer ${deviceId} using Modern API...`);
+      logger.info(`Sending MDM command '${command}' to computer ${deviceId} using Jamf Pro API...`);
       const response = await this.axiosInstance.post('/api/v1/mdm/commands', {
         clientData: [
           {
@@ -3244,7 +3244,7 @@ export class JamfApiClientHybrid {
       logger.info(`Successfully sent MDM command '${command}' to computer ${deviceId}`);
       return response.data;
     } catch (error) {
-      logger.info('Modern API failed for computer MDM command, trying Classic API...');
+      logger.info('Jamf Pro API failed for computer MDM command, trying Classic API...');
 
       try {
         const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_command><general><command>${this.escapeXml(command)}</command></general><computers><computer><id>${this.escapeXml(deviceId)}</id></computer></computers></computer_command>`;
@@ -3309,11 +3309,11 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
 
     try {
-      logger.info('Listing buildings using Modern API...');
+      logger.info('Listing buildings using Jamf Pro API...');
       const response = await this.axiosInstance.get('/api/v1/buildings');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get('/JSSResource/buildings');
@@ -3332,11 +3332,11 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
 
     try {
-      logger.info(`Getting building details for ${buildingId} using Modern API...`);
+      logger.info(`Getting building details for ${buildingId} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/buildings/${buildingId}`);
       return response.data;
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get(`/JSSResource/buildings/id/${buildingId}`);
@@ -3359,11 +3359,11 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
 
     try {
-      logger.info('Listing departments using Modern API...');
+      logger.info('Listing departments using Jamf Pro API...');
       const response = await this.axiosInstance.get('/api/v1/departments');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get('/JSSResource/departments');
@@ -3382,11 +3382,11 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
 
     try {
-      logger.info(`Getting department details for ${departmentId} using Modern API...`);
+      logger.info(`Getting department details for ${departmentId} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/departments/${departmentId}`);
       return response.data;
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get(`/JSSResource/departments/id/${departmentId}`);
@@ -3409,11 +3409,11 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
 
     try {
-      logger.info('Listing categories using Modern API...');
+      logger.info('Listing categories using Jamf Pro API...');
       const response = await this.axiosInstance.get('/api/v1/categories');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get('/JSSResource/categories');
@@ -3432,11 +3432,11 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
 
     try {
-      logger.info(`Getting category details for ${categoryId} using Modern API...`);
+      logger.info(`Getting category details for ${categoryId} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/categories/${categoryId}`);
       return response.data;
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get(`/JSSResource/categories/id/${categoryId}`);
@@ -3593,11 +3593,11 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
 
     try {
-      logger.info('Listing computer extension attributes using Modern API...');
+      logger.info('Listing computer extension attributes using Jamf Pro API...');
       const response = await this.axiosInstance.get('/api/v1/computer-extension-attributes');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get('/JSSResource/computerextensionattributes');
@@ -3616,11 +3616,11 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
 
     try {
-      logger.info(`Getting extension attribute details for ${attributeId} using Modern API...`);
+      logger.info(`Getting extension attribute details for ${attributeId} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/computer-extension-attributes/${attributeId}`);
       return response.data;
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get(`/JSSResource/computerextensionattributes/id/${attributeId}`);
@@ -3637,17 +3637,17 @@ export class JamfApiClientHybrid {
    */
   async createComputerExtensionAttribute(data: any): Promise<any> {
     if (this.readOnlyMode) {
-      throw new Error('Cannot create extension attributes in read-only mode');
+      throw new Error('Cannot create Extension Attributes in read-only mode');
     }
 
     await this.ensureAuthenticated();
 
     try {
-      logger.info('Creating computer extension attribute using Modern API...');
+      logger.info('Creating computer extension attribute using Jamf Pro API...');
       const response = await this.axiosInstance.post('/api/v1/computer-extension-attributes', data);
       return response.data;
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
 
       try {
         const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_extension_attribute><name>${this.escapeXml(data.name)}</name><description>${this.escapeXml(data.description || '')}</description><data_type>${this.escapeXml(data.dataType || 'String')}</data_type><input_type><type>${this.escapeXml(data.inputType || 'script')}</type>${data.scriptContents ? `<script>${this.escapeXml(data.scriptContents)}</script>` : ''}</input_type><inventory_display>${this.escapeXml(data.inventoryDisplay || 'Extension Attributes')}</inventory_display></computer_extension_attribute>`;
@@ -3674,17 +3674,17 @@ export class JamfApiClientHybrid {
    */
   async updateComputerExtensionAttribute(attributeId: string, data: any): Promise<any> {
     if (this.readOnlyMode) {
-      throw new Error('Cannot update extension attributes in read-only mode');
+      throw new Error('Cannot update Extension Attributes in read-only mode');
     }
 
     await this.ensureAuthenticated();
 
     try {
-      logger.info(`Updating extension attribute ${attributeId} using Modern API...`);
+      logger.info(`Updating extension attribute ${attributeId} using Jamf Pro API...`);
       const response = await this.axiosInstance.put(`/api/v1/computer-extension-attributes/${attributeId}`, data);
       return response.data;
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
 
       try {
         const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_extension_attribute>${data.name ? `<name>${this.escapeXml(data.name)}</name>` : ''}${data.description !== undefined ? `<description>${this.escapeXml(data.description)}</description>` : ''}${data.dataType ? `<data_type>${this.escapeXml(data.dataType)}</data_type>` : ''}${data.scriptContents ? `<input_type><type>script</type><script>${this.escapeXml(data.scriptContents)}</script></input_type>` : ''}</computer_extension_attribute>`;
@@ -3851,11 +3851,11 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
 
     try {
-      logger.info('Listing network segments using Modern API...');
+      logger.info('Listing network segments using Jamf Pro API...');
       const response = await this.axiosInstance.get('/api/v1/network-segments');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get('/JSSResource/networksegments');
@@ -3874,11 +3874,11 @@ export class JamfApiClientHybrid {
     await this.ensureAuthenticated();
 
     try {
-      logger.info(`Getting network segment details for ${segmentId} using Modern API...`);
+      logger.info(`Getting network segment details for ${segmentId} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/network-segments/${segmentId}`);
       return response.data;
     } catch (error) {
-      logger.info('Modern API failed, trying Classic API...');
+      logger.info('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get(`/JSSResource/networksegments/id/${segmentId}`);
