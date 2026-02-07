@@ -649,6 +649,19 @@ const CreateRestrictedSoftwareSchema = z.object({
   confirm: z.boolean().optional().default(false).describe('Confirmation flag for restricted software creation'),
 });
 
+const UpdateRestrictedSoftwareSchema = z.object({
+  softwareId: z.string().describe('The restricted software ID to update'),
+  restrictedSoftwareData: z.object({
+    displayName: z.string().optional().describe('Descriptive name for the restriction'),
+    processName: z.string().optional().describe('Exact process/app name to restrict (e.g. "Chess.app")'),
+    matchExactProcessName: z.boolean().optional().describe('Match exact process name'),
+    killProcess: z.boolean().optional().describe('Kill process when found'),
+    deleteExecutable: z.boolean().optional().describe('Delete the application executable'),
+    sendNotification: z.boolean().optional().describe('Send notification to user on violation'),
+  }).describe('Restricted software fields to update'),
+  confirm: z.boolean().optional().default(false).describe('Confirmation flag for restricted software update'),
+});
+
 const DeleteRestrictedSoftwareSchema = z.object({
   softwareId: z.string().describe('The restricted software ID to delete'),
   confirm: z.boolean().optional().default(false).describe('Confirmation flag for restricted software deletion'),
@@ -2841,6 +2854,56 @@ export function registerTools(server: Server, jamfClient: any): void {
             },
           },
           required: ['restrictedSoftwareData'],
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false },
+      },
+      {
+        name: 'updateRestrictedSoftware',
+        description: 'Update an existing restricted software entry (requires confirmation)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            softwareId: {
+              type: 'string',
+              description: 'The restricted software ID to update',
+            },
+            restrictedSoftwareData: {
+              type: 'object',
+              description: 'Restricted software fields to update',
+              properties: {
+                displayName: {
+                  type: 'string',
+                  description: 'Descriptive name for the restriction',
+                },
+                processName: {
+                  type: 'string',
+                  description: 'Exact process/app name to restrict (e.g. "Chess.app")',
+                },
+                matchExactProcessName: {
+                  type: 'boolean',
+                  description: 'Match exact process name',
+                },
+                killProcess: {
+                  type: 'boolean',
+                  description: 'Kill process when found',
+                },
+                deleteExecutable: {
+                  type: 'boolean',
+                  description: 'Delete the application executable',
+                },
+                sendNotification: {
+                  type: 'boolean',
+                  description: 'Send notification to user on violation',
+                },
+              },
+            },
+            confirm: {
+              type: 'boolean',
+              description: 'Confirmation flag for restricted software update',
+              default: false,
+            },
+          },
+          required: ['softwareId', 'restrictedSoftwareData'],
         },
         annotations: { readOnlyHint: false, destructiveHint: false },
       },
@@ -5178,6 +5241,38 @@ export function registerTools(server: Server, jamfClient: any): void {
                 killProcess: createdRestrictedSoftware.kill_process,
                 deleteExecutable: createdRestrictedSoftware.delete_executable,
                 sendNotification: createdRestrictedSoftware.send_notification,
+              },
+            }, null, 2),
+          };
+
+          return { content: [content] };
+        }
+
+        case 'updateRestrictedSoftware': {
+          const { softwareId, restrictedSoftwareData, confirm } = UpdateRestrictedSoftwareSchema.parse(args);
+
+          if (!confirm) {
+            const content: TextContent = {
+              type: 'text',
+              text: 'Restricted software update requires confirmation. Please set confirm: true to proceed.',
+            };
+            return { content: [content] };
+          }
+
+          const updatedRestrictedSoftware = await jamfClient.updateRestrictedSoftware(softwareId, restrictedSoftwareData);
+
+          const content: TextContent = {
+            type: 'text',
+            text: JSON.stringify({
+              message: 'Restricted software updated successfully',
+              restrictedSoftware: {
+                id: updatedRestrictedSoftware.id,
+                displayName: updatedRestrictedSoftware.display_name,
+                processName: updatedRestrictedSoftware.process_name,
+                matchExactProcessName: updatedRestrictedSoftware.match_exact_process_name,
+                killProcess: updatedRestrictedSoftware.kill_process,
+                deleteExecutable: updatedRestrictedSoftware.delete_executable,
+                sendNotification: updatedRestrictedSoftware.send_notification,
               },
             }, null, 2),
           };
