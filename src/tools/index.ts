@@ -637,6 +637,18 @@ const GetRestrictedSoftwareDetailsSchema = z.object({
   softwareId: z.string().describe('The restricted software ID'),
 });
 
+const CreateRestrictedSoftwareSchema = z.object({
+  restrictedSoftwareData: z.object({
+    displayName: z.string().describe('Descriptive name for the restriction'),
+    processName: z.string().describe('Exact process/app name to restrict (e.g. "Chess.app")'),
+    matchExactProcessName: z.boolean().optional().describe('Match exact process name (default true)'),
+    killProcess: z.boolean().optional().describe('Kill process when found'),
+    deleteExecutable: z.boolean().optional().describe('Delete the application executable'),
+    sendNotification: z.boolean().optional().describe('Send notification to user on violation'),
+  }).describe('Restricted software configuration data'),
+  confirm: z.boolean().optional().default(false).describe('Confirmation flag for restricted software creation'),
+});
+
 // Webhooks Schemas
 const ListWebhooksSchema = z.object({});
 
@@ -2779,6 +2791,53 @@ export function registerTools(server: Server, jamfClient: any): void {
           required: ['softwareId'],
         },
         annotations: { readOnlyHint: true, destructiveHint: false },
+      },
+      {
+        name: 'createRestrictedSoftware',
+        description: 'Create a new restricted software entry in Jamf Pro (requires confirmation)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            restrictedSoftwareData: {
+              type: 'object',
+              description: 'Restricted software configuration data',
+              properties: {
+                displayName: {
+                  type: 'string',
+                  description: 'Descriptive name for the restriction',
+                },
+                processName: {
+                  type: 'string',
+                  description: 'Exact process/app name to restrict (e.g. "Chess.app")',
+                },
+                matchExactProcessName: {
+                  type: 'boolean',
+                  description: 'Match exact process name (default true)',
+                },
+                killProcess: {
+                  type: 'boolean',
+                  description: 'Kill process when found',
+                },
+                deleteExecutable: {
+                  type: 'boolean',
+                  description: 'Delete the application executable',
+                },
+                sendNotification: {
+                  type: 'boolean',
+                  description: 'Send notification to user on violation',
+                },
+              },
+              required: ['displayName', 'processName'],
+            },
+            confirm: {
+              type: 'boolean',
+              description: 'Confirmation flag for restricted software creation',
+              default: false,
+            },
+          },
+          required: ['restrictedSoftwareData'],
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false },
       },
 
       // ==========================================
@@ -5064,6 +5123,38 @@ export function registerTools(server: Server, jamfClient: any): void {
           const content: TextContent = {
             type: 'text',
             text: JSON.stringify(restrictedSoftware, null, 2),
+          };
+
+          return { content: [content] };
+        }
+
+        case 'createRestrictedSoftware': {
+          const { restrictedSoftwareData, confirm } = CreateRestrictedSoftwareSchema.parse(args);
+
+          if (!confirm) {
+            const content: TextContent = {
+              type: 'text',
+              text: 'Restricted software creation requires confirmation. Please set confirm: true to proceed.',
+            };
+            return { content: [content] };
+          }
+
+          const createdRestrictedSoftware = await jamfClient.createRestrictedSoftware(restrictedSoftwareData);
+
+          const content: TextContent = {
+            type: 'text',
+            text: JSON.stringify({
+              message: 'Restricted software created successfully',
+              restrictedSoftware: {
+                id: createdRestrictedSoftware.id,
+                displayName: createdRestrictedSoftware.display_name,
+                processName: createdRestrictedSoftware.process_name,
+                matchExactProcessName: createdRestrictedSoftware.match_exact_process_name,
+                killProcess: createdRestrictedSoftware.kill_process,
+                deleteExecutable: createdRestrictedSoftware.delete_executable,
+                sendNotification: createdRestrictedSoftware.send_notification,
+              },
+            }, null, 2),
           };
 
           return { content: [content] };
