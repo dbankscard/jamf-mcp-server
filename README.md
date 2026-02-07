@@ -4,17 +4,17 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue)](https://www.typescriptlang.org/)
 [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-1.0.0-purple)](https://github.com/modelcontextprotocol/sdk)
-[![Tools](https://img.shields.io/badge/Tools-104-orange)]()
+[![Tools](https://img.shields.io/badge/Tools-105-orange)]()
 [![Resources](https://img.shields.io/badge/Resources-12-green)]()
 [![Prompts](https://img.shields.io/badge/Prompts-12-blue)]()
 
 A comprehensive MCP (Model Context Protocol) server that enables AI assistants to interact with Jamf Pro for complete Apple device management. Works with Claude Desktop and **ChatGPT** (via MCP Connectors).
 
-**104 tools** | **12 resources** | **12 workflow prompts** | **5 skills**
+**105 tools** | **12 resources** | **12 workflow prompts** | **5 skills**
 
 ### What's New in v2.0
 
-- **104 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
+- **105 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
 - **12 resources** — all returning live data including compliance, storage, OS versions, encryption, and patch reports
 - **12 workflow prompts** — guided templates for common admin tasks like onboarding, offboarding, security audits, and staged rollouts
 - **Compound tools** — single-call operations like `getFleetOverview`, `getDeviceFullProfile`, `getSecurityPosture`, and `getPolicyAnalysis` that combine multiple API calls behind the scenes
@@ -57,7 +57,7 @@ Ask natural language questions about your Jamf fleet:
 - "Retrieve the LAPS password for this device"
 - "Show me patch compliance across the fleet"
 
-## Tools (104)
+## Tools (105)
 
 ### Compound Tools (Start Here)
 These combine multiple API calls into a single operation:
@@ -195,6 +195,7 @@ These combine multiple API calls into a single operation:
 - **listRestrictedSoftware**: List restricted software entries
 - **getRestrictedSoftwareDetails**: Restricted software configuration details
 - **createRestrictedSoftware**: Create a new restricted software entry (requires confirmation)
+- **deleteRestrictedSoftware**: Delete a restricted software entry (requires confirmation)
 
 ### Webhooks
 - **listWebhooks**: List configured webhooks

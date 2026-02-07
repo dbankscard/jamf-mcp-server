@@ -649,6 +649,11 @@ const CreateRestrictedSoftwareSchema = z.object({
   confirm: z.boolean().optional().default(false).describe('Confirmation flag for restricted software creation'),
 });
 
+const DeleteRestrictedSoftwareSchema = z.object({
+  softwareId: z.string().describe('The restricted software ID to delete'),
+  confirm: z.boolean().optional().default(false).describe('Confirmation flag for restricted software deletion'),
+});
+
 // Webhooks Schemas
 const ListWebhooksSchema = z.object({});
 
@@ -2838,6 +2843,26 @@ export function registerTools(server: Server, jamfClient: any): void {
           required: ['restrictedSoftwareData'],
         },
         annotations: { readOnlyHint: false, destructiveHint: false },
+      },
+      {
+        name: 'deleteRestrictedSoftware',
+        description: 'Delete a restricted software entry (requires confirmation)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            softwareId: {
+              type: 'string',
+              description: 'The restricted software ID to delete',
+            },
+            confirm: {
+              type: 'boolean',
+              description: 'Confirmation flag for restricted software deletion',
+              default: false,
+            },
+          },
+          required: ['softwareId'],
+        },
+        annotations: { readOnlyHint: false, destructiveHint: true },
       },
 
       // ==========================================
@@ -5155,6 +5180,27 @@ export function registerTools(server: Server, jamfClient: any): void {
                 sendNotification: createdRestrictedSoftware.send_notification,
               },
             }, null, 2),
+          };
+
+          return { content: [content] };
+        }
+
+        case 'deleteRestrictedSoftware': {
+          const { softwareId, confirm } = DeleteRestrictedSoftwareSchema.parse(args);
+
+          if (!confirm) {
+            const content: TextContent = {
+              type: 'text',
+              text: 'Restricted software deletion requires confirmation. Please set confirm: true to proceed.',
+            };
+            return { content: [content] };
+          }
+
+          await jamfClient.deleteRestrictedSoftware(softwareId);
+
+          const content: TextContent = {
+            type: 'text',
+            text: `Successfully deleted restricted software ${softwareId}`,
           };
 
           return { content: [content] };
