@@ -4365,6 +4365,46 @@ export class JamfApiClientHybrid {
   }
 
   /**
+   * Update an existing restricted software entry
+   */
+  async updateRestrictedSoftware(softwareId: string, data: {
+    displayName?: string;
+    processName?: string;
+    matchExactProcessName?: boolean;
+    killProcess?: boolean;
+    deleteExecutable?: boolean;
+    sendNotification?: boolean;
+  }): Promise<any> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot update restricted software in read-only mode');
+    }
+
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Updating restricted software ${softwareId} using Classic API with XML...`);
+
+      const xmlPayload = this.buildRestrictedSoftwareXml(data);
+
+      await this.axiosInstance.put(
+        `/JSSResource/restrictedsoftware/id/${softwareId}`,
+        xmlPayload,
+        {
+          headers: {
+            'Content-Type': 'application/xml',
+            'Accept': 'application/xml',
+          }
+        }
+      );
+
+      return await this.getRestrictedSoftwareDetails(softwareId);
+    } catch (error) {
+      logger.info('Failed to update restricted software:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Delete a restricted software entry
    */
   async deleteRestrictedSoftware(softwareId: string): Promise<void> {
