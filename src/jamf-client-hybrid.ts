@@ -4288,6 +4288,82 @@ export class JamfApiClientHybrid {
     }
   }
 
+  /**
+   * Create a new restricted software entry
+   */
+  async createRestrictedSoftware(data: {
+    displayName: string;
+    processName: string;
+    matchExactProcessName?: boolean;
+    killProcess?: boolean;
+    deleteExecutable?: boolean;
+    sendNotification?: boolean;
+  }): Promise<any> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot create restricted software in read-only mode');
+    }
+
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Creating restricted software using Classic API with XML...');
+
+      const xmlPayload = this.buildRestrictedSoftwareXml(data);
+      logger.info('XML Payload:', xmlPayload);
+
+      const response = await this.axiosInstance.post(
+        '/JSSResource/restrictedsoftware/id/0',
+        xmlPayload,
+        {
+          headers: {
+            'Content-Type': 'application/xml',
+            'Accept': 'application/xml',
+          }
+        }
+      );
+
+      const locationHeader = response.headers.location;
+      const softwareId = locationHeader ? locationHeader.split('/').pop() : null;
+
+      if (softwareId) {
+        return await this.getRestrictedSoftwareDetails(softwareId);
+      }
+
+      return { success: true };
+    } catch (error) {
+      logger.info('Failed to create restricted software:', error);
+      throw error;
+    }
+  }
+
+  private buildRestrictedSoftwareXml(data: any): string {
+    const escapeXml = (str: string): string => {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+    };
+
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<restricted_software>\n';
+
+    xml += `  <display_name>${escapeXml(data.displayName)}</display_name>\n`;
+    xml += `  <process_name>${escapeXml(data.processName)}</process_name>\n`;
+    xml += `  <match_exact_process_name>${data.matchExactProcessName !== false}</match_exact_process_name>\n`;
+    xml += `  <kill_process>${data.killProcess === true}</kill_process>\n`;
+    xml += `  <delete_executable>${data.deleteExecutable === true}</delete_executable>\n`;
+    xml += `  <send_notification>${data.sendNotification === true}</send_notification>\n`;
+
+    xml += '  <scope>\n';
+    xml += '    <all_computers>true</all_computers>\n';
+    xml += '  </scope>\n';
+
+    xml += '</restricted_software>';
+
+    return xml;
+  }
+
   // ==========================================
   // Webhooks Tools
   // ==========================================
