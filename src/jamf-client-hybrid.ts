@@ -4364,6 +4364,26 @@ export class JamfApiClientHybrid {
     return xml;
   }
 
+  /**
+   * Delete a restricted software entry
+   */
+  async deleteRestrictedSoftware(softwareId: string): Promise<void> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot delete restricted software in read-only mode');
+    }
+
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Deleting restricted software ${softwareId} using Classic API...`);
+      await this.axiosInstance.delete(`/JSSResource/restrictedsoftware/id/${softwareId}`);
+      logger.info(`Successfully deleted restricted software ${softwareId}`);
+    } catch (error) {
+      logger.info('Failed to delete restricted software:', error);
+      throw error;
+    }
+  }
+
   // ==========================================
   // Webhooks Tools
   // ==========================================
