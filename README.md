@@ -4,17 +4,17 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue)](https://www.typescriptlang.org/)
 [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-1.0.0-purple)](https://github.com/modelcontextprotocol/sdk)
-[![Tools](https://img.shields.io/badge/Tools-106-orange)]()
+[![Tools](https://img.shields.io/badge/Tools-108-orange)]()
 [![Resources](https://img.shields.io/badge/Resources-12-green)]()
 [![Prompts](https://img.shields.io/badge/Prompts-12-blue)]()
 
 A comprehensive MCP (Model Context Protocol) server that enables AI assistants to interact with Jamf Pro for complete Apple device management. Works with Claude Desktop and **ChatGPT** (via MCP Connectors).
 
-**106 tools** | **12 resources** | **12 workflow prompts** | **5 skills**
+**108 tools** | **12 resources** | **12 workflow prompts** | **5 skills**
 
 ### What's New in v2.0
 
-- **106 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
+- **108 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
 - **12 resources** — all returning live data including compliance, storage, OS versions, encryption, and patch reports
 - **12 workflow prompts** — guided templates for common admin tasks like onboarding, offboarding, security audits, and staged rollouts
 - **Compound tools** — single-call operations like `getFleetOverview`, `getDeviceFullProfile`, `getSecurityPosture`, and `getPolicyAnalysis` that combine multiple API calls behind the scenes
@@ -57,7 +57,7 @@ Ask natural language questions about your Jamf fleet:
 - "Retrieve the LAPS password for this device"
 - "Show me patch compliance across the fleet"
 
-## Tools (106)
+## Tools (108)
 
 ### Compound Tools (Start Here)
 These combine multiple API calls into a single operation:
@@ -73,7 +73,6 @@ These combine multiple API calls into a single operation:
 - **checkDeviceCompliance**: Find devices that haven't reported in X days
 - **getDevicesBatch**: Get details for multiple devices in a single request
 - **updateInventory**: Force inventory update on a device
-- **debugDeviceDates**: Debug tool for raw device date fields
 
 ### Computer History & MDM Commands
 - **getComputerHistory**: Full computer history — policy logs, MDM commands, audit events, screen sharing, user/location changes
@@ -92,6 +91,7 @@ These combine multiple API calls into a single operation:
 - **clonePolicy**: Clone a policy with a new name (requires confirmation)
 - **setPolicyEnabled**: Enable or disable a policy (requires confirmation)
 - **updatePolicyScope**: Add/remove computers and groups from policy scope (requires confirmation)
+- **deletePolicy**: Delete a policy (requires confirmation)
 
 ### Script Management
 - **listScripts**: List all scripts
@@ -108,6 +108,7 @@ These combine multiple API calls into a single operation:
 - **searchConfigurationProfiles**: Search profiles by name
 - **deployConfigurationProfile**: Deploy a profile to devices (requires confirmation)
 - **removeConfigurationProfile**: Remove a profile from devices (requires confirmation)
+- **deleteConfigurationProfile**: Delete a configuration profile (requires confirmation)
 
 ### Package Management
 - **listPackages**: List all packages
@@ -146,7 +147,6 @@ These combine multiple API calls into a single operation:
 - **getDeviceComplianceSummary**: Compliance summary — check-in rates, failed policies, missing software
 - **getPolicyComplianceReport**: Policy compliance — success/failure rates, scope coverage
 - **getSoftwareVersionReport**: Software version distribution across devices
-- **getPackageDeploymentStats**: Package deployment statistics and policy usage
 
 ### Buildings, Departments & Categories
 - **listBuildings** / **getBuildingDetails**: Organizational buildings for multi-site scoping
@@ -169,6 +169,7 @@ These combine multiple API calls into a single operation:
 - **getComputerExtensionAttributeDetails**: Full EA details including script content
 - **createComputerExtensionAttribute**: Create a new extension attribute (requires confirmation)
 - **updateComputerExtensionAttribute**: Update an extension attribute (requires confirmation)
+- **deleteComputerExtensionAttribute**: Delete an extension attribute (requires confirmation)
 
 ### Managed Software Updates
 - **listSoftwareUpdatePlans**: List active and completed OS update plans

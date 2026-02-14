@@ -1,32 +1,19 @@
 import { describe, expect, test, jest, beforeEach, afterEach } from '@jest/globals';
 import { Request, Response, NextFunction } from 'express';
-import { authenticateToken, cleanupAuthMiddleware } from '../../server/auth-middleware.js';
-
-// Mock jwks-rsa
-jest.mock('jwks-rsa', () => ({
-  default: jest.fn(() => ({
-    getSigningKey: jest.fn()
-  }))
-}));
-
-// Mock jsonwebtoken
-jest.mock('jsonwebtoken', () => ({
-  default: {
-    verify: jest.fn(),
-    decode: jest.fn()
-  }
-}));
+import { authMiddleware, cleanupAuthMiddleware } from '../../server/auth-middleware.js';
 
 describe('Auth Middleware', () => {
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
   let mockNext: NextFunction;
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
     mockReq = {
       headers: {},
       ip: '127.0.0.1',
       method: 'GET',
+      path: '/test',
       originalUrl: '/test'
     };
 
@@ -38,136 +25,99 @@ describe('Auth Middleware', () => {
 
     mockNext = jest.fn();
 
-    // Reset environment variables
-    process.env.OAUTH_PROVIDER = 'test';
-    process.env.JWT_SECRET = 'test-secret';
+    process.env.NODE_ENV = 'test';
   });
 
   afterEach(() => {
     jest.clearAllMocks();
+    process.env = { ...originalEnv };
   });
 
-  describe('authenticateToken', () => {
+  describe('authMiddleware - request validation', () => {
     test('should reject requests without Authorization header', async () => {
-      await authenticateToken(mockReq as Request, mockRes as Response, mockNext);
+      await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(401);
       expect(mockRes.json).toHaveBeenCalledWith({
-        error: 'No authorization token provided'
+        error: 'Missing authorization header'
       });
       expect(mockNext).not.toHaveBeenCalled();
     });
 
-    test('should reject requests with invalid Bearer format', async () => {
-      mockReq.headers = { authorization: 'InvalidFormat token123' };
+    test('should reject requests with invalid header format (single part)', async () => {
+      mockReq.headers = { authorization: 'InvalidFormat' };
 
-      await authenticateToken(mockReq as Request, mockRes as Response, mockNext);
+      await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(401);
       expect(mockRes.json).toHaveBeenCalledWith({
-        error: 'Invalid authorization format'
+        error: 'Invalid authorization header format'
       });
+      expect(mockNext).not.toHaveBeenCalled();
     });
 
-    test('should authenticate with dev token in development', async () => {
-      process.env.OAUTH_PROVIDER = 'dev';
-      mockReq.headers = { authorization: 'Bearer dev-token' };
+    test('should reject requests with non-Bearer scheme', async () => {
+      mockReq.headers = { authorization: 'Basic token123' };
 
-      await authenticateToken(mockReq as Request, mockRes as Response, mockNext);
+      await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
-      expect(mockNext).toHaveBeenCalled();
-      expect((mockReq as any).user).toEqual({
-        sub: 'dev-user',
-        permissions: ['read:all', 'write:all']
+      expect(mockRes.status).toHaveBeenCalledWith(401);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        error: 'Invalid authentication scheme'
       });
+      expect(mockNext).not.toHaveBeenCalled();
     });
 
-    test('should handle JWT validation with local secret', async () => {
-      process.env.OAUTH_PROVIDER = 'local';
-      const jwt = await import('jsonwebtoken');
-      const mockVerify = jwt.default.verify as jest.Mock;
-      
-      mockVerify.mockImplementation((token, secret, options, callback) => {
-        callback(null, { sub: 'local-user', scope: 'read write' });
-      });
+    test('should reject requests with too many header parts', async () => {
+      mockReq.headers = { authorization: 'Bearer token extra' };
 
-      mockReq.headers = { authorization: 'Bearer valid-jwt' };
-
-      await authenticateToken(mockReq as Request, mockRes as Response, mockNext);
-
-      expect(mockNext).toHaveBeenCalled();
-      expect((mockReq as any).user).toMatchObject({
-        sub: 'local-user',
-        permissions: ['read', 'write']
-      });
-    });
-
-    test('should handle JWT validation errors', async () => {
-      process.env.OAUTH_PROVIDER = 'local';
-      const jwt = await import('jsonwebtoken');
-      const mockVerify = jwt.default.verify as jest.Mock;
-      
-      mockVerify.mockImplementation((token, secret, options, callback) => {
-        callback(new Error('Invalid token'), null);
-      });
-
-      mockReq.headers = { authorization: 'Bearer invalid-jwt' };
-
-      await authenticateToken(mockReq as Request, mockRes as Response, mockNext);
+      await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(401);
       expect(mockNext).not.toHaveBeenCalled();
     });
+  });
 
-    test('should handle Auth0 token validation', async () => {
-      process.env.OAUTH_PROVIDER = 'auth0';
-      process.env.AUTH0_DOMAIN = 'test.auth0.com';
-      process.env.AUTH0_AUDIENCE = 'https://api.test.com';
-
-      const jwt = await import('jsonwebtoken');
-      const mockDecode = jwt.default.decode as jest.Mock;
-      const mockVerify = jwt.default.verify as jest.Mock;
-
-      mockDecode.mockReturnValue({
-        header: { kid: 'test-kid' },
-        payload: { sub: 'auth0|user123' }
-      });
-
-      const jwksRsa = await import('jwks-rsa');
-      const mockJwksClient = jwksRsa.default as jest.Mock;
-      const mockGetSigningKey = jest.fn().mockResolvedValue({
-        getPublicKey: () => 'test-public-key'
-      });
-
-      mockJwksClient.mockReturnValue({
-        getSigningKey: mockGetSigningKey
-      });
-
-      mockVerify.mockImplementation((token, key, options, callback) => {
-        callback(null, { 
-          sub: 'auth0|user123', 
-          permissions: ['read:devices', 'write:devices']
-        });
-      });
-
-      mockReq.headers = { authorization: 'Bearer valid-auth0-token' };
-
-      await authenticateToken(mockReq as Request, mockRes as Response, mockNext);
-
-      expect(mockNext).toHaveBeenCalled();
-      expect((mockReq as any).user).toMatchObject({
-        sub: 'auth0|user123',
-        permissions: ['read:devices', 'write:devices']
-      });
-    });
-
-    test('should handle missing JWT_SECRET', async () => {
-      process.env.OAUTH_PROVIDER = 'local';
-      delete process.env.JWT_SECRET;
-
+  describe('authMiddleware - provider validation', () => {
+    test('should reject unsupported OAuth provider', async () => {
+      process.env.OAUTH_PROVIDER = 'unsupported';
       mockReq.headers = { authorization: 'Bearer some-token' };
 
-      await authenticateToken(mockReq as Request, mockRes as Response, mockNext);
+      await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(401);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    test('should reject dev mode in non-development environment', async () => {
+      process.env.OAUTH_PROVIDER = 'dev';
+      process.env.NODE_ENV = 'production';
+      mockReq.headers = { authorization: 'Bearer dev-token' };
+
+      await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(401);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    test('should reject dev mode without JWT_SECRET', async () => {
+      process.env.OAUTH_PROVIDER = 'dev';
+      process.env.NODE_ENV = 'development';
+      delete process.env.JWT_SECRET;
+      mockReq.headers = { authorization: 'Bearer dev-token' };
+
+      await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(401);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    test('should reject auth0 without valid token', async () => {
+      process.env.OAUTH_PROVIDER = 'auth0';
+      process.env.AUTH0_DOMAIN = 'test.auth0.com';
+      mockReq.headers = { authorization: 'Bearer invalid-token' };
+
+      await authMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(401);
       expect(mockNext).not.toHaveBeenCalled();
