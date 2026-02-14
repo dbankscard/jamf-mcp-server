@@ -3001,7 +3001,7 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
           const result = await executeGetFleetOverview(jamfClient);
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify(result, null, 2),
+            text: enrichResponse('getFleetOverview', result),
           };
           return { content: [content] };
         }
@@ -3021,7 +3021,7 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
           const result = await executeGetSecurityPosture(jamfClient, params);
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify(result, null, 2),
+            text: enrichResponse('getSecurityPosture', result),
           };
           return { content: [content] };
         }
@@ -3031,7 +3031,7 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
           const result = await executeGetPolicyAnalysis(jamfClient, params);
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify(result, null, 2),
+            text: enrichResponse('getPolicyAnalysis', result),
           };
           return { content: [content] };
         }
@@ -3429,7 +3429,7 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
           
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify(policyDetails, null, 2),
+            text: enrichResponse('getPolicyDetails', policyDetails),
           };
 
           return { content: [content] };
@@ -3437,16 +3437,17 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
 
         case 'searchPolicies': {
           const { query, limit } = SearchPoliciesSchema.parse(args);
-          
+
           const policies = await jamfClient.searchPolicies(query, limit);
-          
+
+          const policySearchData = {
+            query,
+            totalResults: policies.length,
+            policies,
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              query,
-              totalResults: policies.length,
-              policies,
-            }, null, 2),
+            text: enrichResponse('searchPolicies', policySearchData),
           };
 
           return { content: [content] };
@@ -3509,10 +3510,10 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'getScriptDetails': {
           const { scriptId } = GetScriptDetailsSchema.parse(args);
           const scriptDetails = await jamfClient.getScriptDetails(scriptId);
-          
+
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify(scriptDetails, null, 2),
+            text: enrichResponse('getScriptDetails', scriptDetails),
           };
 
           return { content: [content] };
@@ -3521,20 +3522,21 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'listConfigurationProfiles': {
           const { type } = ListConfigurationProfilesSchema.parse(args);
           const profiles = await jamfClient.listConfigurationProfiles(type);
-          
+
+          const profileData = {
+            type: type,
+            count: profiles.length,
+            profiles: profiles.map((p: any) => ({
+              id: p.id,
+              name: p.name || p.displayName,
+              description: p.description,
+              category: p.category?.name || p.category_name,
+              level: p.level || p.distribution_method,
+            })),
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              type: type,
-              count: profiles.length,
-              profiles: profiles.map((p: any) => ({
-                id: p.id,
-                name: p.name || p.displayName,
-                description: p.description,
-                category: p.category?.name || p.category_name,
-                level: p.level || p.distribution_method,
-              })),
-            }, null, 2),
+            text: enrichResponse('listConfigurationProfiles', profileData),
           };
 
           return { content: [content] };
@@ -3543,10 +3545,10 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'getConfigurationProfileDetails': {
           const { profileId, type } = GetConfigurationProfileDetailsSchema.parse(args);
           const profile = await jamfClient.getConfigurationProfileDetails(profileId, type);
-          
+
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify(profile, null, 2),
+            text: enrichResponse('getConfigurationProfileDetails', profile),
           };
 
           return { content: [content] };
@@ -3555,21 +3557,22 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'searchConfigurationProfiles': {
           const { query, type } = SearchConfigurationProfilesSchema.parse(args);
           const profiles = await jamfClient.searchConfigurationProfiles(query, type);
-          
+
+          const profileSearchData = {
+            type: type,
+            query: query,
+            count: profiles.length,
+            profiles: profiles.map((p: any) => ({
+              id: p.id,
+              name: p.name || p.displayName,
+              description: p.description,
+              category: p.category?.name || p.category_name,
+              level: p.level || p.distribution_method,
+            })),
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              type: type,
-              query: query,
-              count: profiles.length,
-              profiles: profiles.map((p: any) => ({
-                id: p.id,
-                name: p.name || p.displayName,
-                description: p.description,
-                category: p.category?.name || p.category_name,
-                level: p.level || p.distribution_method,
-              })),
-            }, null, 2),
+            text: enrichResponse('searchConfigurationProfiles', profileSearchData),
           };
 
           return { content: [content] };
@@ -3641,19 +3644,20 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'listComputerGroups': {
           const { type } = ListComputerGroupsSchema.parse(args);
           const groups = await jamfClient.listComputerGroups(type);
-          
+
+          const groupData = {
+            type: type,
+            count: groups.length,
+            groups: groups.map((g: any) => ({
+              id: g.id,
+              name: g.name,
+              isSmart: g.is_smart ?? g.isSmart,
+              memberCount: g.size || g.computers?.length || 0,
+            })),
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              type: type,
-              count: groups.length,
-              groups: groups.map((g: any) => ({
-                id: g.id,
-                name: g.name,
-                isSmart: g.is_smart ?? g.isSmart,
-                memberCount: g.size || g.computers?.length || 0,
-              })),
-            }, null, 2),
+            text: enrichResponse('listComputerGroups', groupData),
           };
 
           return { content: [content] };
@@ -3662,22 +3666,23 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'getComputerGroupDetails': {
           const { groupId } = GetComputerGroupDetailsSchema.parse(args);
           const group = await jamfClient.getComputerGroupDetails(groupId);
-          
+
+          const groupDetailData = {
+            id: group.id,
+            name: group.name,
+            isSmart: group.is_smart ?? group.isSmart,
+            memberCount: group.memberCount || group.computers?.length || 0,
+            criteria: group.criteria,
+            site: group.site,
+            computers: group.computers?.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              serialNumber: c.serial_number || c.serialNumber,
+            })),
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              id: group.id,
-              name: group.name,
-              isSmart: group.is_smart ?? group.isSmart,
-              memberCount: group.memberCount || group.computers?.length || 0,
-              criteria: group.criteria,
-              site: group.site,
-              computers: group.computers?.map((c: any) => ({
-                id: c.id,
-                name: c.name,
-                serialNumber: c.serial_number || c.serialNumber,
-              })),
-            }, null, 2),
+            text: enrichResponse('getComputerGroupDetails', groupDetailData),
           };
 
           return { content: [content] };
@@ -3686,19 +3691,20 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'searchComputerGroups': {
           const { query } = SearchComputerGroupsSchema.parse(args);
           const groups = await jamfClient.searchComputerGroups(query);
-          
+
+          const groupSearchData = {
+            query: query,
+            count: groups.length,
+            groups: groups.map((g: any) => ({
+              id: g.id,
+              name: g.name,
+              isSmart: g.is_smart ?? g.isSmart,
+              memberCount: g.size || g.computers?.length || 0,
+            })),
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              query: query,
-              count: groups.length,
-              groups: groups.map((g: any) => ({
-                id: g.id,
-                name: g.name,
-                isSmart: g.is_smart ?? g.isSmart,
-                memberCount: g.size || g.computers?.length || 0,
-              })),
-            }, null, 2),
+            text: enrichResponse('searchComputerGroups', groupSearchData),
           };
 
           return { content: [content] };
@@ -3707,20 +3713,21 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'getComputerGroupMembers': {
           const { groupId } = GetComputerGroupMembersSchema.parse(args);
           const members = await jamfClient.getComputerGroupMembers(groupId);
-          
+
+          const memberData = {
+            groupId: groupId,
+            count: members.length,
+            members: members.map((m: any) => ({
+              id: m.id,
+              name: m.name,
+              serialNumber: m.serial_number || m.serialNumber,
+              macAddress: m.mac_address || m.macAddress,
+              username: m.username,
+            })),
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              groupId: groupId,
-              count: members.length,
-              members: members.map((m: any) => ({
-                id: m.id,
-                name: m.name,
-                serialNumber: m.serial_number || m.serialNumber,
-                macAddress: m.mac_address || m.macAddress,
-                username: m.username,
-              })),
-            }, null, 2),
+            text: enrichResponse('getComputerGroupMembers', memberData),
           };
 
           return { content: [content] };
@@ -3922,39 +3929,40 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'getMobileDeviceDetails': {
           const { deviceId } = GetMobileDeviceDetailsSchema.parse(args);
           const device = await jamfClient.getMobileDeviceDetails(deviceId);
-          
+
+          const mobileDetailData = {
+            id: device.id,
+            name: device.name || device.general?.name,
+            udid: device.udid || device.general?.udid,
+            serialNumber: device.serial_number || device.general?.serialNumber,
+            model: device.model || device.hardware?.model,
+            modelDisplay: device.model_display || device.hardware?.modelDisplay,
+            osVersion: device.os_version || device.general?.osVersion,
+            osType: device.os_type || device.general?.osType,
+            batteryLevel: device.battery_level || device.general?.batteryLevel,
+            deviceCapacity: device.device_capacity_mb || device.general?.deviceCapacityMb,
+            availableCapacity: device.available_device_capacity_mb || device.general?.availableDeviceCapacityMb,
+            managed: device.managed || device.general?.managed,
+            supervised: device.supervised || device.general?.supervised,
+            deviceOwnershipLevel: device.device_ownership_level || device.general?.deviceOwnershipLevel,
+            lastInventoryUpdate: device.last_inventory_update || device.general?.lastInventoryUpdate,
+            ipAddress: device.ip_address || device.general?.ipAddress,
+            wifiMacAddress: device.wifi_mac_address || device.general?.wifiMacAddress,
+            bluetoothMacAddress: device.bluetooth_mac_address || device.general?.bluetoothMacAddress,
+            user: {
+              username: device.location?.username || device.userAndLocation?.username,
+              realName: device.location?.real_name || device.userAndLocation?.realName,
+              email: device.location?.email_address || device.userAndLocation?.email,
+              position: device.location?.position || device.userAndLocation?.position,
+              phoneNumber: device.location?.phone_number || device.userAndLocation?.phoneNumber,
+            },
+            applications: device.applications?.length || 0,
+            certificates: device.certificates?.length || 0,
+            configurationProfiles: device.configuration_profiles?.length || 0,
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              id: device.id,
-              name: device.name || device.general?.name,
-              udid: device.udid || device.general?.udid,
-              serialNumber: device.serial_number || device.general?.serialNumber,
-              model: device.model || device.hardware?.model,
-              modelDisplay: device.model_display || device.hardware?.modelDisplay,
-              osVersion: device.os_version || device.general?.osVersion,
-              osType: device.os_type || device.general?.osType,
-              batteryLevel: device.battery_level || device.general?.batteryLevel,
-              deviceCapacity: device.device_capacity_mb || device.general?.deviceCapacityMb,
-              availableCapacity: device.available_device_capacity_mb || device.general?.availableDeviceCapacityMb,
-              managed: device.managed || device.general?.managed,
-              supervised: device.supervised || device.general?.supervised,
-              deviceOwnershipLevel: device.device_ownership_level || device.general?.deviceOwnershipLevel,
-              lastInventoryUpdate: device.last_inventory_update || device.general?.lastInventoryUpdate,
-              ipAddress: device.ip_address || device.general?.ipAddress,
-              wifiMacAddress: device.wifi_mac_address || device.general?.wifiMacAddress,
-              bluetoothMacAddress: device.bluetooth_mac_address || device.general?.bluetoothMacAddress,
-              user: {
-                username: device.location?.username || device.userAndLocation?.username,
-                realName: device.location?.real_name || device.userAndLocation?.realName,
-                email: device.location?.email_address || device.userAndLocation?.email,
-                position: device.location?.position || device.userAndLocation?.position,
-                phoneNumber: device.location?.phone_number || device.userAndLocation?.phoneNumber,
-              },
-              applications: device.applications?.length || 0,
-              certificates: device.certificates?.length || 0,
-              configurationProfiles: device.configuration_profiles?.length || 0,
-            }, null, 2),
+            text: enrichResponse('getMobileDeviceDetails', mobileDetailData),
           };
 
           return { content: [content] };
@@ -4011,10 +4019,10 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
           }
 
           await jamfClient.sendMDMCommand(deviceId, command);
-          
+
           const content: TextContent = {
             type: 'text',
-            text: `Successfully sent MDM command '${command}' to mobile device ${deviceId}`,
+            text: enrichResponse('sendMDMCommand', { message: `Successfully sent MDM command '${command}' to mobile device ${deviceId}` }),
           };
 
           return { content: [content] };
@@ -4023,19 +4031,20 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'listMobileDeviceGroups': {
           const { type } = ListMobileDeviceGroupsSchema.parse(args);
           const groups = await jamfClient.getMobileDeviceGroups(type);
-          
+
+          const mobileGroupData = {
+            type: type,
+            count: groups.length,
+            groups: groups.map((g: any) => ({
+              id: g.id,
+              name: g.name,
+              isSmart: g.is_smart ?? g.isSmart,
+              memberCount: g.size || g.mobile_devices?.length || 0,
+            })),
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              type: type,
-              count: groups.length,
-              groups: groups.map((g: any) => ({
-                id: g.id,
-                name: g.name,
-                isSmart: g.is_smart ?? g.isSmart,
-                memberCount: g.size || g.mobile_devices?.length || 0,
-              })),
-            }, null, 2),
+            text: enrichResponse('listMobileDeviceGroups', mobileGroupData),
           };
 
           return { content: [content] };
@@ -4069,27 +4078,28 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'listPackages': {
           const { limit } = ListPackagesSchema.parse(args);
           const packages = await jamfClient.listPackages(limit);
-          
+
+          const packageData = {
+            count: packages.length,
+            packages: packages.map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              category: p.category,
+              filename: p.filename,
+              size: p.size,
+              priority: p.priority,
+              fillUserTemplate: p.fill_user_template,
+              fillExistingUsers: p.fill_existing_users,
+              rebootRequired: p.reboot_required,
+              osRequirements: p.os_requirements,
+              requiredProcessor: p.required_processor,
+              info: p.info,
+              notes: p.notes,
+            })),
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              count: packages.length,
-              packages: packages.map((p: any) => ({
-                id: p.id,
-                name: p.name,
-                category: p.category,
-                filename: p.filename,
-                size: p.size,
-                priority: p.priority,
-                fillUserTemplate: p.fill_user_template,
-                fillExistingUsers: p.fill_existing_users,
-                rebootRequired: p.reboot_required,
-                osRequirements: p.os_requirements,
-                requiredProcessor: p.required_processor,
-                info: p.info,
-                notes: p.notes,
-              })),
-            }, null, 2),
+            text: enrichResponse('listPackages', packageData),
           };
 
           return { content: [content] };
@@ -4098,20 +4108,21 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'searchPackages': {
           const { query, limit } = SearchPackagesSchema.parse(args);
           const packages = await jamfClient.searchPackages(query, limit);
-          
+
+          const pkgSearchData = {
+            query: query,
+            count: packages.length,
+            packages: packages.map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              category: p.category,
+              filename: p.filename,
+              size: p.size,
+            })),
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              query: query,
-              count: packages.length,
-              packages: packages.map((p: any) => ({
-                id: p.id,
-                name: p.name,
-                category: p.category,
-                filename: p.filename,
-                size: p.size,
-              })),
-            }, null, 2),
+            text: enrichResponse('searchPackages', pkgSearchData),
           };
 
           return { content: [content] };
@@ -4181,20 +4192,21 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
           }
 
           const createdPolicy = await jamfClient.createPolicy(policyData);
-          
+
+          const createPolicyData = {
+            message: 'Policy created successfully',
+            policy: {
+              id: createdPolicy.id,
+              name: createdPolicy.general?.name || policyData.general.name,
+              enabled: createdPolicy.general?.enabled,
+              trigger: createdPolicy.general?.trigger,
+              frequency: createdPolicy.general?.frequency,
+              category: createdPolicy.general?.category,
+            },
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              message: 'Policy created successfully',
-              policy: {
-                id: createdPolicy.id,
-                name: createdPolicy.general?.name || policyData.general.name,
-                enabled: createdPolicy.general?.enabled,
-                trigger: createdPolicy.general?.trigger,
-                frequency: createdPolicy.general?.frequency,
-                category: createdPolicy.general?.category,
-              },
-            }, null, 2),
+            text: enrichResponse('createPolicy', createPolicyData),
           };
 
           return { content: [content] };
@@ -4350,21 +4362,22 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'listScripts': {
           const { limit } = ListScriptsSchema.parse(args);
           const scripts = await jamfClient.listScripts(limit);
-          
+
+          const scriptData = {
+            count: scripts.length,
+            scripts: scripts.map((s: any) => ({
+              id: s.id,
+              name: s.name,
+              category: s.category,
+              filename: s.filename,
+              priority: s.priority,
+              info: s.info,
+              notes: s.notes,
+            })),
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              count: scripts.length,
-              scripts: scripts.map((s: any) => ({
-                id: s.id,
-                name: s.name,
-                category: s.category,
-                filename: s.filename,
-                priority: s.priority,
-                info: s.info,
-                notes: s.notes,
-              })),
-            }, null, 2),
+            text: enrichResponse('listScripts', scriptData),
           };
 
           return { content: [content] };
@@ -4373,21 +4386,22 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
         case 'searchScripts': {
           const { query, limit } = SearchScriptsSchema.parse(args);
           const scripts = await jamfClient.searchScripts(query, limit);
-          
+
+          const scriptSearchData = {
+            query: query,
+            totalResults: scripts.length,
+            scripts: scripts.map((s: any) => ({
+              id: s.id,
+              name: s.name,
+              category: s.category,
+              filename: s.filename,
+              priority: s.priority,
+              info: s.info,
+            })),
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              query: query,
-              count: scripts.length,
-              scripts: scripts.map((s: any) => ({
-                id: s.id,
-                name: s.name,
-                category: s.category,
-                filename: s.filename,
-                priority: s.priority,
-                info: s.info,
-              })),
-            }, null, 2),
+            text: enrichResponse('searchScripts', scriptSearchData),
           };
 
           return { content: [content] };
@@ -4405,23 +4419,24 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
           }
 
           const createdScript = await jamfClient.createScript(scriptData);
-          
+
+          const createScriptData = {
+            message: 'Script created successfully',
+            script: {
+              id: createdScript.id,
+              name: createdScript.name,
+              category: createdScript.category,
+              filename: createdScript.filename,
+              priority: createdScript.priority,
+              info: createdScript.info,
+              notes: createdScript.notes,
+              parameters: createdScript.parameters,
+              osRequirements: createdScript.osRequirements,
+            },
+          };
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
-              message: 'Script created successfully',
-              script: {
-                id: createdScript.id,
-                name: createdScript.name,
-                category: createdScript.category,
-                filename: createdScript.filename,
-                priority: createdScript.priority,
-                info: createdScript.info,
-                notes: createdScript.notes,
-                parameters: createdScript.parameters,
-                osRequirements: createdScript.osRequirements,
-              },
-            }, null, 2),
+            text: enrichResponse('createScript', createScriptData),
           };
 
           return { content: [content] };
@@ -4553,7 +4568,7 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
 
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify(history, null, 2),
+            text: enrichResponse('getComputerHistory', history),
           };
 
           return { content: [content] };
@@ -4565,7 +4580,7 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
 
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify(policyLogs, null, 2),
+            text: enrichResponse('getComputerPolicyLogs', policyLogs),
           };
 
           return { content: [content] };
@@ -4577,7 +4592,7 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
 
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify(commandHistory, null, 2),
+            text: enrichResponse('getComputerMDMCommandHistory', commandHistory),
           };
 
           return { content: [content] };
@@ -4603,10 +4618,10 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
 
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
+            text: enrichResponse('sendComputerMDMCommand', {
               message: `Successfully sent MDM command '${command}' to computer ${deviceId}`,
               result,
-            }, null, 2),
+            }),
           };
 
           return { content: [content] };
@@ -4631,9 +4646,9 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
 
           const content: TextContent = {
             type: 'text',
-            text: JSON.stringify({
+            text: enrichResponse('flushMDMCommands', {
               message: `Successfully flushed ${commandStatus} MDM commands for computer ${deviceId}`,
-            }, null, 2),
+            }),
           };
 
           return { content: [content] };
