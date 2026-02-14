@@ -7,6 +7,7 @@ import { isAxiosError, getErrorMessage, getAxiosErrorStatus, getAxiosErrorData }
 import { JamfAPIError } from './utils/errors.js';
 import { LRUCache } from './utils/lru-cache.js';
 import { XmlBuilder, xmlDocument, escapeXml } from './utils/xml-builder.js';
+import { retryWithBackoff, getRetryConfig } from './utils/retry.js';
 import { IJamfApiClient } from './types/jamf-client.js';
 
 const logger = createLogger('jamf-client-hybrid');
@@ -127,10 +128,56 @@ export class JamfApiClientHybrid implements IJamfApiClient {
       return config;
     });
     
-    // MCP servers must not output to stdout/stderr - commenting out logger
-    // logger.info(`Jamf Hybrid Client initialized with:`);
-    // logger.info(`  - OAuth2 (Client Credentials): ${this.hasOAuth2 ? 'Available' : 'Not configured'}`);
-    // logger.info(`  - Basic Auth (Bearer Token): ${this.hasBasicAuth ? 'Available' : 'Not configured'}`);
+    // Add response interceptor for automatic retry on transient failures
+    this.axiosInstance.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const config = error.config;
+        // Prevent infinite retry loops
+        if (!config || config.__retryCount >= (config.__maxRetries ?? 3)) {
+          throw error;
+        }
+
+        const status = error.response?.status;
+        const isNetworkError = !error.response && (
+          error.code === 'ECONNRESET' ||
+          error.code === 'ECONNABORTED' ||
+          error.code === 'ETIMEDOUT' ||
+          error.code === 'ECONNREFUSED'
+        );
+        const isRetryable = status === 429 || status === 503 || isNetworkError;
+
+        if (!isRetryable) {
+          throw error;
+        }
+
+        config.__retryCount = (config.__retryCount || 0) + 1;
+        const retryConfig = getRetryConfig();
+        const maxRetries = config.__maxRetries ?? Math.min(retryConfig.maxRetries, 3);
+
+        // Calculate delay: use Retry-After header for 429, otherwise exponential backoff
+        let delay: number;
+        if (status === 429 && error.response?.headers?.['retry-after']) {
+          delay = parseInt(error.response.headers['retry-after'], 10) * 1000;
+        } else {
+          delay = Math.min(
+            retryConfig.initialDelay * Math.pow(retryConfig.backoffMultiplier, config.__retryCount - 1),
+            retryConfig.maxDelay
+          );
+        }
+        // Add jitter to prevent thundering herd
+        delay += Math.random() * 0.1 * delay;
+
+        logger.info(`Retrying request (${config.__retryCount}/${maxRetries}) after ${Math.round(delay)}ms`, {
+          url: config.url,
+          status,
+          code: error.code,
+        });
+
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.axiosInstance.request(config);
+      }
+    );
   }
 
   /**
@@ -168,7 +215,7 @@ export class JamfApiClientHybrid implements IJamfApiClient {
    */
   private async getOAuth2Token(): Promise<void> {
     if (!this.hasOAuth2) return;
-    
+
     try {
       const params = new URLSearchParams({
         'grant_type': 'client_credentials',
@@ -176,14 +223,28 @@ export class JamfApiClientHybrid implements IJamfApiClient {
         'client_secret': this.config.clientSecret!
       });
 
-      const response = await axios.post(
-        `${this.config.baseUrl}/api/oauth/token`,
-        params,
+      const response = await retryWithBackoff(
+        () => axios.post(
+          `${this.config.baseUrl}/api/oauth/token`,
+          params,
+          {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            httpsAgent: agentPool.getHttpsAgent(),
+          }
+        ),
         {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+          maxRetries: 2,
+          initialDelay: 1000,
+          maxDelay: 5000,
+          retryCondition: (err: Error) => {
+            const status = (err as any)?.response?.status;
+            return !status || status >= 500 || status === 429;
           },
-          httpsAgent: agentPool.getHttpsAgent(), // Use pooled agent
+          onRetry: (err, attempt) => {
+            logger.info(`OAuth2 token retry ${attempt}`, { error: err.message });
+          },
         }
       );
 
@@ -209,17 +270,31 @@ export class JamfApiClientHybrid implements IJamfApiClient {
    */
   private async getBearerTokenWithBasicAuth(): Promise<void> {
     if (!this.hasBasicAuth) return;
-    
+
     try {
-      const response = await axios.post(
-        `${this.config.baseUrl}/api/v1/auth/token`,
-        null,
+      const response = await retryWithBackoff(
+        () => axios.post(
+          `${this.config.baseUrl}/api/v1/auth/token`,
+          null,
+          {
+            headers: {
+              'Authorization': this.basicAuthHeader!,
+              'Accept': 'application/json',
+            },
+            httpsAgent: agentPool.getHttpsAgent(),
+          }
+        ),
         {
-          headers: {
-            'Authorization': this.basicAuthHeader!,
-            'Accept': 'application/json',
+          maxRetries: 2,
+          initialDelay: 1000,
+          maxDelay: 5000,
+          retryCondition: (err: Error) => {
+            const status = (err as any)?.response?.status;
+            return !status || status >= 500 || status === 429;
           },
-          httpsAgent: agentPool.getHttpsAgent(), // Use pooled agent
+          onRetry: (err, attempt) => {
+            logger.info(`Bearer token retry ${attempt}`, { error: err.message });
+          },
         }
       );
 
