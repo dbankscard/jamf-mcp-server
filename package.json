@@ -1,6 +1,6 @@
 {
   "name": "jamf-mcp-server",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Comprehensive MCP server for Jamf Pro Apple device management with support for computers, mobile devices, policies, scripts, profiles, packages, and reporting",
   "type": "module",
   "main": "dist/index-main.js",
