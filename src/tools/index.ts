@@ -6,6 +6,7 @@ import {
   TextContent,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { IJamfApiClient } from '../types/jamf-client.js';
 import {
   GetFleetOverviewSchema,
   GetDeviceFullProfileSchema,
@@ -649,7 +650,7 @@ const GetWebhookDetailsSchema = z.object({
   webhookId: z.string().describe('The webhook ID'),
 });
 
-export function registerTools(server: Server, jamfClient: any): void {
+export function registerTools(server: Server, jamfClient: IJamfApiClient): void {
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools: Tool[] = [
       // ==========================================
@@ -3832,8 +3833,8 @@ export function registerTools(server: Server, jamfClient: any): void {
         }
 
         case 'listAdvancedComputerSearches': {
-          const { limit } = ListAdvancedComputerSearchesSchema.parse(args);
-          const searches = await jamfClient.listAdvancedComputerSearches(limit);
+          ListAdvancedComputerSearchesSchema.parse(args);
+          const searches = await jamfClient.listAdvancedComputerSearches();
           
           const content: TextContent = {
             type: 'text',

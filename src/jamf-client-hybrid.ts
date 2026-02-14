@@ -6,6 +6,8 @@ import { JamfComputer } from './types/jamf-api.js';
 import { isAxiosError, getErrorMessage, getAxiosErrorStatus, getAxiosErrorData } from './utils/type-guards.js';
 import { JamfAPIError } from './utils/errors.js';
 import { LRUCache } from './utils/lru-cache.js';
+import { XmlBuilder, xmlDocument, escapeXml } from './utils/xml-builder.js';
+import { IJamfApiClient } from './types/jamf-client.js';
 
 const logger = createLogger('jamf-client-hybrid');
 const agentPool = getDefaultAgentPool();
@@ -53,7 +55,7 @@ export type Computer = z.infer<typeof ComputerSchema>;
  * 2. Basic Auth to get Bearer token (which works on Classic API)
  * 3. Intelligent fallback to whichever method works
  */
-export class JamfApiClientHybrid {
+export class JamfApiClientHybrid implements IJamfApiClient {
   private axiosInstance: AxiosInstance;
   private oauth2Token: JamfAuthToken | null = null;
   private bearerToken: JamfAuthToken | null = null;
@@ -997,123 +999,105 @@ export class JamfApiClientHybrid {
    * Build XML payload for policy creation/update
    */
   private buildPolicyXml(policyData: any): string {
-    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<policy>\n';
-    
-    // General settings
+    const xml = xmlDocument('policy');
+
     if (policyData.general) {
-      xml += '  <general>\n';
-      if (policyData.general.name) xml += `    <name>${this.escapeXml(policyData.general.name)}</name>\n`;
-      if (policyData.general.enabled !== undefined) xml += `    <enabled>${policyData.general.enabled}</enabled>\n`;
-      if (policyData.general.trigger) xml += `    <trigger>${this.escapeXml(policyData.general.trigger)}</trigger>\n`;
-      if (policyData.general.trigger_checkin !== undefined) xml += `    <trigger_checkin>${policyData.general.trigger_checkin}</trigger_checkin>\n`;
-      if (policyData.general.trigger_enrollment_complete !== undefined) xml += `    <trigger_enrollment_complete>${policyData.general.trigger_enrollment_complete}</trigger_enrollment_complete>\n`;
-      if (policyData.general.trigger_login !== undefined) xml += `    <trigger_login>${policyData.general.trigger_login}</trigger_login>\n`;
-      if (policyData.general.trigger_logout !== undefined) xml += `    <trigger_logout>${policyData.general.trigger_logout}</trigger_logout>\n`;
-      if (policyData.general.trigger_network_state_changed !== undefined) xml += `    <trigger_network_state_changed>${policyData.general.trigger_network_state_changed}</trigger_network_state_changed>\n`;
-      if (policyData.general.trigger_startup !== undefined) xml += `    <trigger_startup>${policyData.general.trigger_startup}</trigger_startup>\n`;
-      if (policyData.general.trigger_other) xml += `    <trigger_other>${this.escapeXml(policyData.general.trigger_other)}</trigger_other>\n`;
-      if (policyData.general.frequency) xml += `    <frequency>${this.escapeXml(policyData.general.frequency)}</frequency>\n`;
-      if (policyData.general.retry_event) xml += `    <retry_event>${this.escapeXml(policyData.general.retry_event)}</retry_event>\n`;
-      if (policyData.general.retry_attempts !== undefined) xml += `    <retry_attempts>${policyData.general.retry_attempts}</retry_attempts>\n`;
-      if (policyData.general.notify_on_each_failed_retry !== undefined) xml += `    <notify_on_each_failed_retry>${policyData.general.notify_on_each_failed_retry}</notify_on_each_failed_retry>\n`;
-      if (policyData.general.location_user_only !== undefined) xml += `    <location_user_only>${policyData.general.location_user_only}</location_user_only>\n`;
-      if (policyData.general.target_drive) xml += `    <target_drive>${this.escapeXml(policyData.general.target_drive)}</target_drive>\n`;
-      if (policyData.general.offline !== undefined) xml += `    <offline>${policyData.general.offline}</offline>\n`;
-      if (policyData.general.category) xml += `    <category>${this.escapeXml(policyData.general.category)}</category>\n`;
-      xml += '  </general>\n';
+      const g = policyData.general;
+      xml.open('general');
+      xml.optionalStringElement('name', g.name);
+      xml.optionalElement('enabled', g.enabled);
+      xml.optionalStringElement('trigger', g.trigger);
+      xml.optionalElement('trigger_checkin', g.trigger_checkin);
+      xml.optionalElement('trigger_enrollment_complete', g.trigger_enrollment_complete);
+      xml.optionalElement('trigger_login', g.trigger_login);
+      xml.optionalElement('trigger_logout', g.trigger_logout);
+      xml.optionalElement('trigger_network_state_changed', g.trigger_network_state_changed);
+      xml.optionalElement('trigger_startup', g.trigger_startup);
+      xml.optionalStringElement('trigger_other', g.trigger_other);
+      xml.optionalStringElement('frequency', g.frequency);
+      xml.optionalStringElement('retry_event', g.retry_event);
+      xml.optionalElement('retry_attempts', g.retry_attempts);
+      xml.optionalElement('notify_on_each_failed_retry', g.notify_on_each_failed_retry);
+      xml.optionalElement('location_user_only', g.location_user_only);
+      xml.optionalStringElement('target_drive', g.target_drive);
+      xml.optionalElement('offline', g.offline);
+      xml.optionalStringElement('category', g.category);
+      xml.close('general');
     }
-    
-    // Scope
+
     if (policyData.scope) {
-      xml += '  <scope>\n';
-      if (policyData.scope.all_computers !== undefined) {
-        xml += `    <all_computers>${policyData.scope.all_computers}</all_computers>\n`;
+      const s = policyData.scope;
+      xml.open('scope');
+      xml.optionalElement('all_computers', s.all_computers);
+      if (s.computers?.length > 0) {
+        xml.open('computers');
+        for (const c of s.computers) xml.raw(`    <computer><id>${c.id}</id></computer>\n`);
+        xml.close('computers');
       }
-      if (policyData.scope.computers && policyData.scope.computers.length > 0) {
-        xml += '    <computers>\n';
-        policyData.scope.computers.forEach((computer: any) => {
-          xml += `      <computer><id>${computer.id}</id></computer>\n`;
-        });
-        xml += '    </computers>\n';
+      if (s.computer_groups?.length > 0) {
+        xml.open('computer_groups');
+        for (const g of s.computer_groups) xml.raw(`    <computer_group><id>${g.id}</id></computer_group>\n`);
+        xml.close('computer_groups');
       }
-      if (policyData.scope.computer_groups && policyData.scope.computer_groups.length > 0) {
-        xml += '    <computer_groups>\n';
-        policyData.scope.computer_groups.forEach((group: any) => {
-          xml += `      <computer_group><id>${group.id}</id></computer_group>\n`;
-        });
-        xml += '    </computer_groups>\n';
+      if (s.buildings?.length > 0) {
+        xml.open('buildings');
+        for (const b of s.buildings) xml.raw(`    <building><id>${b.id}</id></building>\n`);
+        xml.close('buildings');
       }
-      if (policyData.scope.buildings && policyData.scope.buildings.length > 0) {
-        xml += '    <buildings>\n';
-        policyData.scope.buildings.forEach((building: any) => {
-          xml += `      <building><id>${building.id}</id></building>\n`;
-        });
-        xml += '    </buildings>\n';
+      if (s.departments?.length > 0) {
+        xml.open('departments');
+        for (const d of s.departments) xml.raw(`    <department><id>${d.id}</id></department>\n`);
+        xml.close('departments');
       }
-      if (policyData.scope.departments && policyData.scope.departments.length > 0) {
-        xml += '    <departments>\n';
-        policyData.scope.departments.forEach((dept: any) => {
-          xml += `      <department><id>${dept.id}</id></department>\n`;
-        });
-        xml += '    </departments>\n';
-      }
-      xml += '  </scope>\n';
+      xml.close('scope');
     }
-    
-    // Self Service
+
     if (policyData.self_service) {
-      xml += '  <self_service>\n';
-      if (policyData.self_service.use_for_self_service !== undefined) xml += `    <use_for_self_service>${policyData.self_service.use_for_self_service}</use_for_self_service>\n`;
-      if (policyData.self_service.self_service_display_name) xml += `    <self_service_display_name>${this.escapeXml(policyData.self_service.self_service_display_name)}</self_service_display_name>\n`;
-      if (policyData.self_service.install_button_text) xml += `    <install_button_text>${this.escapeXml(policyData.self_service.install_button_text)}</install_button_text>\n`;
-      if (policyData.self_service.reinstall_button_text) xml += `    <reinstall_button_text>${this.escapeXml(policyData.self_service.reinstall_button_text)}</reinstall_button_text>\n`;
-      if (policyData.self_service.self_service_description) xml += `    <self_service_description>${this.escapeXml(policyData.self_service.self_service_description)}</self_service_description>\n`;
-      if (policyData.self_service.force_users_to_view_description !== undefined) xml += `    <force_users_to_view_description>${policyData.self_service.force_users_to_view_description}</force_users_to_view_description>\n`;
-      if (policyData.self_service.feature_on_main_page !== undefined) xml += `    <feature_on_main_page>${policyData.self_service.feature_on_main_page}</feature_on_main_page>\n`;
-      xml += '  </self_service>\n';
+      const ss = policyData.self_service;
+      xml.open('self_service');
+      xml.optionalElement('use_for_self_service', ss.use_for_self_service);
+      xml.optionalStringElement('self_service_display_name', ss.self_service_display_name);
+      xml.optionalStringElement('install_button_text', ss.install_button_text);
+      xml.optionalStringElement('reinstall_button_text', ss.reinstall_button_text);
+      xml.optionalStringElement('self_service_description', ss.self_service_description);
+      xml.optionalElement('force_users_to_view_description', ss.force_users_to_view_description);
+      xml.optionalElement('feature_on_main_page', ss.feature_on_main_page);
+      xml.close('self_service');
     }
-    
-    // Package Configuration
+
     if (policyData.package_configuration) {
-      xml += '  <package_configuration>\n';
-      if (policyData.package_configuration.packages && policyData.package_configuration.packages.length > 0) {
-        xml += '    <packages>\n';
-        policyData.package_configuration.packages.forEach((pkg: any) => {
-          xml += '      <package>\n';
-          xml += `        <id>${pkg.id}</id>\n`;
-          if (pkg.action) xml += `        <action>${this.escapeXml(pkg.action)}</action>\n`;
-          if (pkg.fut !== undefined) xml += `        <fut>${pkg.fut}</fut>\n`;
-          if (pkg.feu !== undefined) xml += `        <feu>${pkg.feu}</feu>\n`;
-          xml += '      </package>\n';
-        });
-        xml += '    </packages>\n';
+      xml.open('package_configuration');
+      if (policyData.package_configuration.packages?.length > 0) {
+        xml.open('packages');
+        for (const pkg of policyData.package_configuration.packages) {
+          xml.open('package');
+          xml.element('id', pkg.id);
+          xml.optionalStringElement('action', pkg.action);
+          xml.optionalElement('fut', pkg.fut);
+          xml.optionalElement('feu', pkg.feu);
+          xml.close('package');
+        }
+        xml.close('packages');
       }
-      xml += '  </package_configuration>\n';
+      xml.close('package_configuration');
     }
-    
-    // Scripts
-    if (policyData.scripts && policyData.scripts.length > 0) {
-      xml += '  <scripts>\n';
-      policyData.scripts.forEach((script: any) => {
-        xml += '    <script>\n';
-        xml += `      <id>${script.id}</id>\n`;
-        if (script.priority) xml += `      <priority>${this.escapeXml(script.priority)}</priority>\n`;
-        if (script.parameter4) xml += `      <parameter4>${this.escapeXml(script.parameter4)}</parameter4>\n`;
-        if (script.parameter5) xml += `      <parameter5>${this.escapeXml(script.parameter5)}</parameter5>\n`;
-        if (script.parameter6) xml += `      <parameter6>${this.escapeXml(script.parameter6)}</parameter6>\n`;
-        if (script.parameter7) xml += `      <parameter7>${this.escapeXml(script.parameter7)}</parameter7>\n`;
-        if (script.parameter8) xml += `      <parameter8>${this.escapeXml(script.parameter8)}</parameter8>\n`;
-        if (script.parameter9) xml += `      <parameter9>${this.escapeXml(script.parameter9)}</parameter9>\n`;
-        if (script.parameter10) xml += `      <parameter10>${this.escapeXml(script.parameter10)}</parameter10>\n`;
-        if (script.parameter11) xml += `      <parameter11>${this.escapeXml(script.parameter11)}</parameter11>\n`;
-        xml += '    </script>\n';
-      });
-      xml += '  </scripts>\n';
+
+    if (policyData.scripts?.length > 0) {
+      xml.open('scripts');
+      for (const script of policyData.scripts) {
+        xml.open('script');
+        xml.element('id', script.id);
+        xml.optionalStringElement('priority', script.priority);
+        for (let i = 4; i <= 11; i++) {
+          xml.optionalStringElement(`parameter${i}`, script[`parameter${i}`]);
+        }
+        xml.close('script');
+      }
+      xml.close('scripts');
     }
-    
-    xml += '</policy>';
-    
-    return xml;
+
+    xml.close('policy');
+    return xml.build();
   }
 
   // Get script details
@@ -2284,46 +2268,29 @@ export class JamfApiClientHybrid {
    * Build XML payload for script creation/update
    */
   private buildScriptXml(scriptData: any): string {
-    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<script>\n';
-    
-    // Basic script information
-    if (scriptData.name) xml += `  <name>${this.escapeXml(scriptData.name)}</name>\n`;
-    if (scriptData.category) xml += `  <category>${this.escapeXml(scriptData.category)}</category>\n`;
-    if (scriptData.filename) xml += `  <filename>${this.escapeXml(scriptData.filename)}</filename>\n`;
-    if (scriptData.info) xml += `  <info>${this.escapeXml(scriptData.info)}</info>\n`;
-    if (scriptData.notes) xml += `  <notes>${this.escapeXml(scriptData.notes)}</notes>\n`;
-    if (scriptData.priority) xml += `  <priority>${this.escapeXml(scriptData.priority)}</priority>\n`;
+    const xml = xmlDocument('script');
 
-    // Parameters
+    xml.optionalStringElement('name', scriptData.name);
+    xml.optionalStringElement('category', scriptData.category);
+    xml.optionalStringElement('filename', scriptData.filename);
+    xml.optionalStringElement('info', scriptData.info);
+    xml.optionalStringElement('notes', scriptData.notes);
+    xml.optionalStringElement('priority', scriptData.priority);
+
     if (scriptData.parameters) {
-      xml += '  <parameters>\n';
-      if (scriptData.parameters.parameter4) xml += `    <parameter4>${this.escapeXml(scriptData.parameters.parameter4)}</parameter4>\n`;
-      if (scriptData.parameters.parameter5) xml += `    <parameter5>${this.escapeXml(scriptData.parameters.parameter5)}</parameter5>\n`;
-      if (scriptData.parameters.parameter6) xml += `    <parameter6>${this.escapeXml(scriptData.parameters.parameter6)}</parameter6>\n`;
-      if (scriptData.parameters.parameter7) xml += `    <parameter7>${this.escapeXml(scriptData.parameters.parameter7)}</parameter7>\n`;
-      if (scriptData.parameters.parameter8) xml += `    <parameter8>${this.escapeXml(scriptData.parameters.parameter8)}</parameter8>\n`;
-      if (scriptData.parameters.parameter9) xml += `    <parameter9>${this.escapeXml(scriptData.parameters.parameter9)}</parameter9>\n`;
-      if (scriptData.parameters.parameter10) xml += `    <parameter10>${this.escapeXml(scriptData.parameters.parameter10)}</parameter10>\n`;
-      if (scriptData.parameters.parameter11) xml += `    <parameter11>${this.escapeXml(scriptData.parameters.parameter11)}</parameter11>\n`;
-      xml += '  </parameters>\n';
+      xml.open('parameters');
+      for (let i = 4; i <= 11; i++) {
+        xml.optionalStringElement(`parameter${i}`, scriptData.parameters[`parameter${i}`]);
+      }
+      xml.close('parameters');
     }
 
-    // OS Requirements
-    if (scriptData.os_requirements) xml += `  <os_requirements>${this.escapeXml(scriptData.os_requirements)}</os_requirements>\n`;
+    xml.optionalStringElement('os_requirements', scriptData.os_requirements);
+    xml.optionalStringElement('script_contents', scriptData.script_contents);
+    xml.optionalElement('script_contents_encoded', scriptData.script_contents_encoded);
 
-    // Script contents
-    if (scriptData.script_contents) {
-      xml += `  <script_contents>${this.escapeXml(scriptData.script_contents)}</script_contents>\n`;
-    }
-    
-    // Script contents encoded flag
-    if (scriptData.script_contents_encoded !== undefined) {
-      xml += `  <script_contents_encoded>${scriptData.script_contents_encoded}</script_contents_encoded>\n`;
-    }
-    
-    xml += '</script>';
-    
-    return xml;
+    xml.close('script');
+    return xml.build();
   }
 
   /**
@@ -3288,30 +3255,35 @@ export class JamfApiClientHybrid {
     const displayFields = searchData.display_fields || defaultDisplayFields;
 
     // Build XML payload for the Classic API
-    const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?>
-<advanced_computer_search>
-  <name>${this.escapeXml(searchData.name)}</name>
-  <view_as>Standard Web Page</view_as>
-  <sort_1></sort_1>
-  <sort_2></sort_2>
-  <sort_3></sort_3>
-  <criteria>
-    ${searchData.criteria ? searchData.criteria.map(criterion => `
-    <criterion>
-      <name>${this.escapeXml(criterion.name)}</name>
-      <priority>${criterion.priority}</priority>
-      <and_or>${criterion.and_or}</and_or>
-      <search_type>${this.escapeXml(criterion.search_type)}</search_type>
-      <value>${this.escapeXml(criterion.value)}</value>
-    </criterion>`).join('') : ''}
-  </criteria>
-  <display_fields>
-    ${displayFields.map(field => `
-    <display_field>
-      <name>${this.escapeXml(field)}</name>
-    </display_field>`).join('')}
-  </display_fields>
-</advanced_computer_search>`;
+    const xml = xmlDocument('advanced_computer_search');
+    xml.element('name', searchData.name);
+    xml.element('view_as', 'Standard Web Page');
+    xml.raw('  <sort_1></sort_1>\n  <sort_2></sort_2>\n  <sort_3></sort_3>\n');
+
+    xml.open('criteria');
+    if (searchData.criteria) {
+      for (const criterion of searchData.criteria) {
+        xml.open('criterion');
+        xml.element('name', criterion.name);
+        xml.element('priority', criterion.priority);
+        xml.element('and_or', criterion.and_or);
+        xml.element('search_type', criterion.search_type);
+        xml.element('value', criterion.value);
+        xml.close('criterion');
+      }
+    }
+    xml.close('criteria');
+
+    xml.open('display_fields');
+    for (const field of displayFields) {
+      xml.open('display_field');
+      xml.element('name', field);
+      xml.close('display_field');
+    }
+    xml.close('display_fields');
+
+    xml.close('advanced_computer_search');
+    const xmlPayload = xml.build();
 
     try {
       logger.info(`Creating advanced computer search "${searchData.name}" via Classic API...`);
@@ -3640,7 +3612,7 @@ export class JamfApiClientHybrid {
       logger.debug('Jamf Pro API failed for computer MDM command, trying Classic API...');
 
       try {
-        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_command><general><command>${this.escapeXml(command)}</command></general><computers><computer><id>${this.escapeXml(deviceId)}</id></computer></computers></computer_command>`;
+        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_command><general><command>${escapeXml(command)}</command></general><computers><computer><id>${escapeXml(deviceId)}</id></computer></computers></computer_command>`;
         const response = await this.axiosInstance.post(
           '/JSSResource/computercommands/command/' + command,
           xmlPayload,
@@ -4097,7 +4069,7 @@ export class JamfApiClientHybrid {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
-        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_extension_attribute><name>${this.escapeXml(data.name)}</name><description>${this.escapeXml(data.description || '')}</description><data_type>${this.escapeXml(data.dataType || 'String')}</data_type><input_type><type>${this.escapeXml(data.inputType || 'script')}</type>${data.scriptContents ? `<script>${this.escapeXml(data.scriptContents)}</script>` : ''}</input_type><inventory_display>${this.escapeXml(data.inventoryDisplay || 'Extension Attributes')}</inventory_display></computer_extension_attribute>`;
+        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_extension_attribute><name>${escapeXml(data.name)}</name><description>${escapeXml(data.description || '')}</description><data_type>${escapeXml(data.dataType || 'String')}</data_type><input_type><type>${escapeXml(data.inputType || 'script')}</type>${data.scriptContents ? `<script>${escapeXml(data.scriptContents)}</script>` : ''}</input_type><inventory_display>${escapeXml(data.inventoryDisplay || 'Extension Attributes')}</inventory_display></computer_extension_attribute>`;
         const response = await this.axiosInstance.post(
           '/JSSResource/computerextensionattributes/id/0',
           xmlPayload,
@@ -4139,7 +4111,7 @@ export class JamfApiClientHybrid {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
-        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_extension_attribute>${data.name ? `<name>${this.escapeXml(data.name)}</name>` : ''}${data.description !== undefined ? `<description>${this.escapeXml(data.description)}</description>` : ''}${data.dataType ? `<data_type>${this.escapeXml(data.dataType)}</data_type>` : ''}${data.scriptContents ? `<input_type><type>script</type><script>${this.escapeXml(data.scriptContents)}</script></input_type>` : ''}</computer_extension_attribute>`;
+        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_extension_attribute>${data.name ? `<name>${escapeXml(data.name)}</name>` : ''}${data.description !== undefined ? `<description>${escapeXml(data.description)}</description>` : ''}${data.dataType ? `<data_type>${escapeXml(data.dataType)}</data_type>` : ''}${data.scriptContents ? `<input_type><type>script</type><script>${escapeXml(data.scriptContents)}</script></input_type>` : ''}</computer_extension_attribute>`;
         const response = await this.axiosInstance.put(
           `/JSSResource/computerextensionattributes/id/${attributeId}`,
           xmlPayload,
@@ -4709,22 +4681,21 @@ export class JamfApiClientHybrid {
   }
 
   private buildRestrictedSoftwareXml(data: any): string {
-    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<restricted_software>\n';
+    const xml = xmlDocument('restricted_software');
 
-    xml += `  <display_name>${this.escapeXml(data.displayName)}</display_name>\n`;
-    xml += `  <process_name>${this.escapeXml(data.processName)}</process_name>\n`;
-    xml += `  <match_exact_process_name>${data.matchExactProcessName !== false}</match_exact_process_name>\n`;
-    xml += `  <kill_process>${data.killProcess === true}</kill_process>\n`;
-    xml += `  <delete_executable>${data.deleteExecutable === true}</delete_executable>\n`;
-    xml += `  <send_notification>${data.sendNotification === true}</send_notification>\n`;
+    xml.element('display_name', data.displayName);
+    xml.element('process_name', data.processName);
+    xml.element('match_exact_process_name', data.matchExactProcessName !== false);
+    xml.element('kill_process', data.killProcess === true);
+    xml.element('delete_executable', data.deleteExecutable === true);
+    xml.element('send_notification', data.sendNotification === true);
 
-    xml += '  <scope>\n';
-    xml += '    <all_computers>true</all_computers>\n';
-    xml += '  </scope>\n';
+    xml.open('scope');
+    xml.element('all_computers', true);
+    xml.close('scope');
 
-    xml += '</restricted_software>';
-
-    return xml;
+    xml.close('restricted_software');
+    return xml.build();
   }
 
   /**
@@ -4835,15 +4806,4 @@ export class JamfApiClientHybrid {
     }
   }
 
-  /**
-   * Helper method to escape XML special characters
-   */
-  private escapeXml(unsafe: string): string {
-    return unsafe
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
-  }
 }

@@ -116,16 +116,16 @@ The circuit breaker prevents cascading failures by:
 
 ## Usage Examples
 
-### Basic Usage (Enhanced Mode)
+### Basic Usage
 ```typescript
-// Automatically uses enhanced error handling
-const client = new JamfApiClientEnhanced({
+// The hybrid client wraps all API errors in JamfAPIError automatically
+const client = new JamfApiClientHybrid({
   baseUrl: process.env.JAMF_URL,
   clientId: process.env.JAMF_CLIENT_ID,
   clientSecret: process.env.JAMF_CLIENT_SECRET,
 });
 
-// Errors will be automatically retried and enhanced
+// API errors are thrown as structured JamfAPIError instances
 try {
   const computers = await client.searchComputers('macbook');
 } catch (error) {

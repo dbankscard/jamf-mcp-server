@@ -3,7 +3,7 @@
 ## [2.0.0] - 2026-02-14
 
 ### Major Features
-- **106 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
+- **108 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
 - **12 resources** — all returning live data including compliance, storage, OS versions, encryption, and patch reports
 - **12 workflow prompts** — guided templates for common admin tasks like onboarding, offboarding, security audits, and staged rollouts
 - **5 skills** — advanced multi-step operations for the ChatGPT connector
@@ -75,7 +75,7 @@
   - Consistent import paths
 
 ### Documentation
-- Comprehensive README with all 106 tools documented
+- Comprehensive README with all 108 tools documented
 - Security documentation (SECURITY.md)
 - Docker deployment guide (DOCKER_DEPLOYMENT.md)
 - Error handling guide (ERROR_HANDLING.md)
@@ -112,6 +112,25 @@
 
 - **Tool Annotations**: Each tool declares `readOnlyHint` and `destructiveHint` for client-side safety
 - **Correct Jamf terminology** — all documentation and tool descriptions align with official Jamf developer documentation
+
+### Reliability & Bug Fixes
+- **Auth Token Refresh Race Condition**: Added mutex-based locking to prevent concurrent token refresh requests from corrupting auth state
+- **Cache Invalidation**: Write operations (create, update, delete) now properly invalidate cached data to prevent stale reads
+- **JamfAPIError Wrapping**: All API methods in the hybrid client now throw structured `JamfAPIError` with status codes, error codes, and actionable suggestions instead of raw errors
+- **Log Level Corrections**: Replaced `console.error` with proper `logger.error`/`logger.warn`/`logger.info` calls throughout the codebase
+
+### New Tools
+- **deletePolicy**: Delete a policy (requires confirmation)
+- **deleteConfigurationProfile**: Delete a configuration profile — computer or mobile device (requires confirmation)
+- **deleteComputerExtensionAttribute**: Delete an extension attribute (requires confirmation)
+- Removed `debugDeviceDates` (internal debug tool not intended for production use)
+
+### Code Quality Improvements
+- **Zod Schema Deduplication**: Extracted shared field definitions for create/update tool pairs to reduce repetition
+- **ESLint Cleanup**: Resolved 73 lint errors across the codebase
+- **GitHub Actions CI Pipeline**: Added `ci.yml` workflow — build, test, and lint on every PR and push to main
+- **New Unit Tests**: Added tests for `utils/retry.ts` and `utils/errors.ts` covering retry logic, circuit breaker, and error classes
+- **XML Builder Extraction**: Centralized XML construction for Classic API payloads
 
 ## [1.2.0] - Previous Release
 - Skills integration for Claude Desktop and ChatGPT
