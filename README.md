@@ -1,4 +1,4 @@
-# Jamf Pro MCP Server v2.0
+# Jamf Pro MCP Server v2.1
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
@@ -12,7 +12,7 @@ A comprehensive MCP (Model Context Protocol) server that enables AI assistants t
 
 **108 tools** | **12 resources** | **12 workflow prompts** | **5 skills**
 
-### What's New in v2.0
+### What's New in v2.1
 
 - **108 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
 - **12 resources** — all returning live data including compliance, storage, OS versions, encryption, and patch reports
@@ -353,7 +353,7 @@ The server uses a hybrid API client that supports both the Jamf Pro API and Clas
 - For Classic API endpoints, the server automatically uses Bearer Token authentication
 
 ### 503 Errors on Classic API
-- If using Client Credentials only (no username/password), ensure you're running v2.0+ which supports Bearer Token authentication on Classic API endpoints
+- If using Client Credentials only (no username/password), ensure you're running v2.1+ which supports Bearer Token authentication on Classic API endpoints
 
 ### Timeouts on Compound Tools
 - The default request timeout is 30 seconds

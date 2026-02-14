@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.0.0] - 2026-02-14
+## [2.1.0] - 2026-02-14
 
 ### Major Features
 - **108 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
