@@ -2,9 +2,9 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 import { z } from 'zod';
 import { createLogger } from './server/logger.js';
 import { getDefaultAgentPool } from './utils/http-agent-pool.js';
-import { JamfComputer, JamfComputerDetails, JamfSearchResponse, JamfApiResponse } from './types/jamf-api.js';
+import { JamfComputer } from './types/jamf-api.js';
 import { isAxiosError, getErrorMessage, getAxiosErrorStatus, getAxiosErrorData } from './utils/type-guards.js';
-import { JamfAPIError, NetworkError, AuthenticationError } from './utils/errors.js';
+import { JamfAPIError } from './utils/errors.js';
 import { LRUCache } from './utils/lru-cache.js';
 
 const logger = createLogger('jamf-client-hybrid');
@@ -30,6 +30,7 @@ export interface JamfAuthToken {
 }
 
 // Computer schemas (same as unified client)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const ComputerSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -66,6 +67,9 @@ export class JamfApiClientHybrid {
   private oauth2Available: boolean = false;
   private bearerTokenAvailable: boolean = false;
   
+  // Auth refresh lock (prevents concurrent token refreshes)
+  private authPromise: Promise<void> | null = null;
+
   // Cache
   private cachedSearchId: number | null = null;
   private apiCache: LRUCache<any> = new LRUCache({ maxSize: 200, maxAge: 60000 });
@@ -234,25 +238,51 @@ export class JamfApiClientHybrid {
   }
 
   /**
-   * Ensure we have a valid token
+   * Ensure we have a valid token.
+   * Uses a promise-based lock so concurrent callers share a single refresh.
    */
   private async ensureAuthenticated(): Promise<void> {
+    // Fast path: a non-expired token already exists
+    const bearerValid = this.bearerTokenAvailable && this.bearerToken && this.bearerToken.expires > new Date();
+    const oauth2Valid = this.oauth2Available && this.oauth2Token && this.oauth2Token.expires > new Date();
+    if (bearerValid || oauth2Valid) {
+      return;
+    }
+
+    // If a refresh is already in progress, wait for it
+    if (this.authPromise) {
+      await this.authPromise;
+      return;
+    }
+
+    // First caller performs the refresh; others will await authPromise above
+    this.authPromise = this._refreshAuth();
+    try {
+      await this.authPromise;
+    } finally {
+      this.authPromise = null;
+    }
+  }
+
+  /**
+   * Internal: actually perform the token refresh (called under lock)
+   */
+  private async _refreshAuth(): Promise<void> {
     // Try Bearer token from Basic Auth first (it works on Jamf Pro API)
     if (this.hasBasicAuth) {
       if (!this.bearerToken || this.bearerToken.expires <= new Date()) {
         await this.getBearerTokenWithBasicAuth();
       }
     }
-    
+
     // Try OAuth2 if Bearer token failed
     if (!this.bearerTokenAvailable && this.hasOAuth2) {
       if (!this.oauth2Token || this.oauth2Token.expires <= new Date()) {
         await this.getOAuth2Token();
       }
     }
-    
-    // We don't set headers here anymore - the interceptor handles it based on the endpoint
-    // Just ensure we have at least one valid auth method
+
+    // Ensure we have at least one valid auth method
     if (!this.bearerTokenAvailable && !this.oauth2Available && !this.hasBasicAuth) {
       throw new Error('No valid authentication method available');
     }
@@ -548,7 +578,7 @@ export class JamfApiClientHybrid {
       try {
         await this.axiosInstance.post('/api/v1/auth/keep-alive');
         logger.info('✅ Token refreshed');
-      } catch (error) {
+      } catch (_error) {
         // Re-authenticate if keep-alive fails
         await this.getBearerTokenWithBasicAuth();
       }
@@ -558,6 +588,10 @@ export class JamfApiClientHybrid {
   // Execute policy (if not in read-only mode)
   async executePolicy(policyId: string, deviceIds: string[]): Promise<void> {
     this.invalidateCache('listPolicies');
+    for (const id of deviceIds) {
+      this.invalidateCache(`computerDetails:${id}`);
+    }
+    this.invalidateCache('searchComputers');
     if (this.readOnlyMode) {
       throw new Error('Cannot execute policies in read-only mode');
     }
@@ -571,6 +605,10 @@ export class JamfApiClientHybrid {
 
   // Deploy script (if not in read-only mode)
   async deployScript(scriptId: string, deviceIds: string[]): Promise<void> {
+    for (const id of deviceIds) {
+      this.invalidateCache(`computerDetails:${id}`);
+    }
+    this.invalidateCache('searchComputers');
     if (this.readOnlyMode) {
       throw new Error('Cannot deploy scripts in read-only mode');
     }
@@ -767,7 +805,7 @@ export class JamfApiClientHybrid {
       // Build XML payload
       const xmlPayload = this.buildPolicyXml(policyData);
       
-      const response = await this.axiosInstance.put(
+      await this.axiosInstance.put(
         `/JSSResource/policies/id/${policyId}`,
         xmlPayload,
         {
@@ -836,7 +874,7 @@ export class JamfApiClientHybrid {
     
     try {
       // Get current policy details
-      const policy = await this.getPolicyDetails(policyId);
+      await this.getPolicyDetails(policyId);
       
       // Update only the enabled status
       const updateData = {
@@ -935,6 +973,7 @@ export class JamfApiClientHybrid {
    * Delete a policy
    */
   async deletePolicy(policyId: string): Promise<void> {
+    this.invalidateCache('listPolicies');
     if (this.readOnlyMode) {
       throw new Error('Cannot delete policies in read-only mode');
     }
@@ -1147,7 +1186,7 @@ export class JamfApiClientHybrid {
       
       const response = await this.axiosInstance.get(endpoint);
       return response.data.results || [];
-    } catch (error) {
+    } catch (_error) {
       logger.debug(`Jamf Pro API failed, trying Classic API...`);
       
       // Fall back to Classic API
@@ -1193,7 +1232,7 @@ export class JamfApiClientHybrid {
       
       const response = await this.axiosInstance.get(endpoint);
       return response.data;
-    } catch (error) {
+    } catch (_error) {
       logger.debug(`Jamf Pro API failed, trying Classic API...`);
       
       // Fall back to Classic API
@@ -1245,10 +1284,16 @@ export class JamfApiClientHybrid {
    * Deploy configuration profile to devices
    */
   async deployConfigurationProfile(profileId: string, deviceIds: string[], type: 'computer' | 'mobiledevice' = 'computer'): Promise<void> {
+    if (type === 'computer') {
+      for (const id of deviceIds) {
+        this.invalidateCache(`computerDetails:${id}`);
+      }
+      this.invalidateCache('searchComputers');
+    }
     if (this.readOnlyMode) {
       throw new Error('Cannot deploy configuration profiles in read-only mode');
     }
-    
+
     await this.ensureAuthenticated();
     
     // Get current profile details to update scope
@@ -1280,7 +1325,7 @@ export class JamfApiClientHybrid {
       
       await this.axiosInstance.put(endpoint, updatePayload);
       logger.info(`Successfully deployed profile ${profileId} to ${deviceIds.length} ${type}(s)`);
-    } catch (error) {
+    } catch (_error) {
       logger.debug(`Jamf Pro API failed, trying Classic API...`);
       
       // Fall back to Classic API
@@ -1320,6 +1365,12 @@ export class JamfApiClientHybrid {
    * Remove configuration profile from devices
    */
   async removeConfigurationProfile(profileId: string, deviceIds: string[], type: 'computer' | 'mobiledevice' = 'computer'): Promise<void> {
+    if (type === 'computer') {
+      for (const id of deviceIds) {
+        this.invalidateCache(`computerDetails:${id}`);
+      }
+      this.invalidateCache('searchComputers');
+    }
     if (this.readOnlyMode) {
       throw new Error('Cannot remove configuration profiles in read-only mode');
     }
@@ -1355,7 +1406,7 @@ export class JamfApiClientHybrid {
       
       await this.axiosInstance.put(endpoint, updatePayload);
       logger.info(`Successfully removed profile ${profileId} from ${deviceIds.length} ${type}(s)`);
-    } catch (error) {
+    } catch (_error) {
       logger.debug(`Jamf Pro API failed, trying Classic API...`);
       
       // Fall back to Classic API
@@ -1700,7 +1751,7 @@ export class JamfApiClientHybrid {
       
       const response = await this.axiosInstance.post('/api/v1/computer-groups', payload);
       return response.data;
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
       
       // Fall back to Classic API
@@ -1758,7 +1809,7 @@ export class JamfApiClientHybrid {
       
       logger.info('Sending XML payload:', xmlPayload);
       
-      const response = await this.axiosInstance.put(
+      await this.axiosInstance.put(
         `/JSSResource/computergroups/id/${groupId}`,
         xmlPayload,
         {
@@ -1775,7 +1826,7 @@ export class JamfApiClientHybrid {
       try {
         const updatedGroup = await this.getComputerGroupDetails(groupId);
         return updatedGroup;
-      } catch (fetchError) {
+      } catch (_fetchError) {
         // If we can't fetch the updated details, just return a success indicator
         logger.info('Could not fetch updated group details, but update likely succeeded');
         return { id: groupId, success: true };
@@ -1804,7 +1855,7 @@ export class JamfApiClientHybrid {
       logger.info(`Deleting computer group ${groupId} using Jamf Pro API...`);
       await this.axiosInstance.delete(`/api/v1/computer-groups/${groupId}`);
       logger.info(`Successfully deleted computer group ${groupId}`);
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
       
       // Fall back to Classic API
@@ -1838,7 +1889,7 @@ export class JamfApiClientHybrid {
       });
       
       return response.data.results || [];
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
     }
     
@@ -1874,7 +1925,7 @@ export class JamfApiClientHybrid {
       logger.info(`Getting mobile device details for ${deviceId} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v2/mobile-devices/${deviceId}/detail`);
       return response.data;
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
     }
     
@@ -1914,7 +1965,7 @@ export class JamfApiClientHybrid {
       logger.info(`Updating mobile device inventory for ${deviceId} using Jamf Pro API...`);
       await this.axiosInstance.post(`/api/v2/mobile-devices/${deviceId}/update-inventory`);
       logger.info(`Mobile device inventory update requested for device ${deviceId}`);
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
       
       // Try Classic API using MDM commands
@@ -2010,7 +2061,7 @@ export class JamfApiClientHybrid {
       }
       
       logger.info(`Successfully sent MDM command '${command}' to device ${deviceId}`);
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
       
       // Try Classic API
@@ -2103,10 +2154,11 @@ export class JamfApiClientHybrid {
     os_requirements?: string;
     script_contents_encoded?: boolean;
   }): Promise<any> {
+    this.invalidateCache('listScripts');
     if (this.readOnlyMode) {
       throw new Error('Cannot create scripts in read-only mode');
     }
-    
+
     await this.ensureAuthenticated();
     
     try {
@@ -2169,10 +2221,11 @@ export class JamfApiClientHybrid {
     os_requirements?: string;
     script_contents_encoded?: boolean;
   }): Promise<any> {
+    this.invalidateCache('listScripts');
     if (this.readOnlyMode) {
       throw new Error('Cannot update scripts in read-only mode');
     }
-    
+
     await this.ensureAuthenticated();
     
     try {
@@ -2181,7 +2234,7 @@ export class JamfApiClientHybrid {
       // Build XML payload
       const xmlPayload = this.buildScriptXml(scriptData);
       
-      const response = await this.axiosInstance.put(
+      await this.axiosInstance.put(
         `/JSSResource/scripts/id/${scriptId}`,
         xmlPayload,
         {
@@ -2207,12 +2260,13 @@ export class JamfApiClientHybrid {
    * Delete a script
    */
   async deleteScript(scriptId: string): Promise<void> {
+    this.invalidateCache('listScripts');
     if (this.readOnlyMode) {
       throw new Error('Cannot delete scripts in read-only mode');
     }
-    
+
     await this.ensureAuthenticated();
-    
+
     try {
       logger.info(`Deleting script ${scriptId} using Classic API...`);
       await this.axiosInstance.delete(`/JSSResource/scripts/id/${scriptId}`);
@@ -2295,7 +2349,7 @@ export class JamfApiClientHybrid {
       }
       
       return groups;
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
       
       // Fall back to Classic API
@@ -2342,7 +2396,7 @@ export class JamfApiClientHybrid {
       logger.info(`Getting mobile device group ${groupId} details using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/mobile-device-groups/${groupId}`);
       return response.data;
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
       
       // Fall back to Classic API
@@ -3543,6 +3597,8 @@ export class JamfApiClientHybrid {
    * Send MDM command to a macOS computer (lock, wipe, restart, etc.)
    */
   async sendComputerMDMCommand(deviceId: string, command: string): Promise<any> {
+    this.invalidateCache(`computerDetails:${deviceId}`);
+    this.invalidateCache('searchComputers');
     if (this.readOnlyMode) {
       throw new Error('Cannot send MDM commands in read-only mode');
     }
@@ -3580,7 +3636,7 @@ export class JamfApiClientHybrid {
       });
       logger.info(`Successfully sent MDM command '${command}' to computer ${deviceId}`);
       return response.data;
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed for computer MDM command, trying Classic API...');
 
       try {
@@ -3615,6 +3671,8 @@ export class JamfApiClientHybrid {
    * Flush (clear) pending or failed MDM commands for a computer
    */
   async flushMDMCommands(deviceId: string, commandStatus: string): Promise<void> {
+    this.invalidateCache(`computerDetails:${deviceId}`);
+    this.invalidateCache('searchComputers');
     if (this.readOnlyMode) {
       throw new Error('Cannot flush MDM commands in read-only mode');
     }
@@ -3655,7 +3713,7 @@ export class JamfApiClientHybrid {
       logger.info('Listing buildings using Jamf Pro API...');
       const response = await this.axiosInstance.get('/api/v1/buildings');
       return response.data.results || [];
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
@@ -3681,7 +3739,7 @@ export class JamfApiClientHybrid {
       logger.info(`Getting building details for ${buildingId} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/buildings/${buildingId}`);
       return response.data;
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
@@ -3711,7 +3769,7 @@ export class JamfApiClientHybrid {
       logger.info('Listing departments using Jamf Pro API...');
       const response = await this.axiosInstance.get('/api/v1/departments');
       return response.data.results || [];
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
@@ -3737,7 +3795,7 @@ export class JamfApiClientHybrid {
       logger.info(`Getting department details for ${departmentId} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/departments/${departmentId}`);
       return response.data;
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
@@ -3767,7 +3825,7 @@ export class JamfApiClientHybrid {
       logger.info('Listing categories using Jamf Pro API...');
       const response = await this.axiosInstance.get('/api/v1/categories');
       return response.data.results || [];
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
@@ -3793,7 +3851,7 @@ export class JamfApiClientHybrid {
       logger.info(`Getting category details for ${categoryId} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/categories/${categoryId}`);
       return response.data;
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
@@ -3978,7 +4036,7 @@ export class JamfApiClientHybrid {
       logger.info('Listing computer extension attributes using Jamf Pro API...');
       const response = await this.axiosInstance.get('/api/v1/computer-extension-attributes');
       return response.data.results || [];
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
@@ -4004,7 +4062,7 @@ export class JamfApiClientHybrid {
       logger.info(`Getting extension attribute details for ${attributeId} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/computer-extension-attributes/${attributeId}`);
       return response.data;
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
@@ -4024,6 +4082,7 @@ export class JamfApiClientHybrid {
    * Create a new computer extension attribute
    */
   async createComputerExtensionAttribute(data: any): Promise<any> {
+    this.invalidateCache('searchComputers');
     if (this.readOnlyMode) {
       throw new Error('Cannot create Extension Attributes in read-only mode');
     }
@@ -4034,7 +4093,7 @@ export class JamfApiClientHybrid {
       logger.info('Creating computer extension attribute using Jamf Pro API...');
       const response = await this.axiosInstance.post('/api/v1/computer-extension-attributes', data);
       return response.data;
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
@@ -4064,6 +4123,8 @@ export class JamfApiClientHybrid {
    * Update an existing computer extension attribute
    */
   async updateComputerExtensionAttribute(attributeId: string, data: any): Promise<any> {
+    this.invalidateCache('computerDetails');
+    this.invalidateCache('searchComputers');
     if (this.readOnlyMode) {
       throw new Error('Cannot update Extension Attributes in read-only mode');
     }
@@ -4074,7 +4135,7 @@ export class JamfApiClientHybrid {
       logger.info(`Updating extension attribute ${attributeId} using Jamf Pro API...`);
       const response = await this.axiosInstance.put(`/api/v1/computer-extension-attributes/${attributeId}`, data);
       return response.data;
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
@@ -4104,6 +4165,8 @@ export class JamfApiClientHybrid {
    * Delete a computer extension attribute
    */
   async deleteComputerExtensionAttribute(attributeId: string): Promise<void> {
+    this.invalidateCache('computerDetails');
+    this.invalidateCache('searchComputers');
     if (this.readOnlyMode) {
       throw new Error('Cannot delete Extension Attributes in read-only mode');
     }
@@ -4114,7 +4177,7 @@ export class JamfApiClientHybrid {
       logger.info(`Deleting extension attribute ${attributeId} using Jamf Pro API...`);
       await this.axiosInstance.delete(`/api/v1/computer-extension-attributes/${attributeId}`);
       logger.info(`Successfully deleted extension attribute ${attributeId}`);
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
@@ -4296,7 +4359,7 @@ export class JamfApiClientHybrid {
       logger.info('Listing network segments using Jamf Pro API...');
       const response = await this.axiosInstance.get('/api/v1/network-segments');
       return response.data.results || [];
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
@@ -4322,7 +4385,7 @@ export class JamfApiClientHybrid {
       logger.info(`Getting network segment details for ${segmentId} using Jamf Pro API...`);
       const response = await this.axiosInstance.get(`/api/v1/network-segments/${segmentId}`);
       return response.data;
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {

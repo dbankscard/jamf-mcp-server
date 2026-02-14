@@ -1,4 +1,4 @@
-import { isRetryableError, getRetryDelay, JamfAPIError, NetworkError } from './errors.js';
+import { isRetryableError, getRetryDelay, JamfAPIError } from './errors.js';
 
 export interface RetryOptions {
   maxRetries?: number;

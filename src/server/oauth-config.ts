@@ -229,7 +229,7 @@ export const handleOAuthCallback = async (req: Request, res: Response): Promise<
     
     try {
       tokens = JSON.parse(responseText);
-    } catch (e) {
+    } catch (_e) {
       logger.error('Failed to parse token response', { response: responseText });
       throw new Error('Invalid response from OAuth provider');
     }

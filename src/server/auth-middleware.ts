@@ -13,7 +13,7 @@ const JWKS_CACHE_TTL = 3600000; // 1 hour TTL
 const jwksClientsCache = new LRUCache<jwksRsa.JwksClient>({
   maxSize: JWKS_CACHE_SIZE,
   maxAge: JWKS_CACHE_TTL,
-  onEvict: (key, client) => {
+  onEvict: (key, _client) => {
     logger.debug(`Evicting JWKS client for domain: ${key}`);
   }
 });
@@ -171,7 +171,7 @@ const validateToken = async (token: string): Promise<TokenPayload> => {
       case 'okta':
         return await validateOktaToken(token);
         
-      case 'dev':
+      case 'dev': {
         // Development mode - use local JWT validation
         if (process.env.NODE_ENV !== 'development') {
           throw new Error('Dev mode authentication only available in development environment');
@@ -181,6 +181,7 @@ const validateToken = async (token: string): Promise<TokenPayload> => {
           throw new Error('JWT_SECRET not configured for dev mode');
         }
         return jwt.verify(token, secret) as TokenPayload;
+      }
         
       default:
         throw new Error(`Unsupported OAuth provider: ${provider}`);

@@ -231,10 +231,11 @@ export async function deviceSearch(
     // Sort devices
     devices.sort((a: any, b: any) => {
       switch (sortBy) {
-        case 'lastSeen':
+        case 'lastSeen': {
           const dateA = new Date(a.lastContactTime || a.lastReportDate || 0);
           const dateB = new Date(b.lastContactTime || b.lastReportDate || 0);
           return dateB.getTime() - dateA.getTime();
+        }
         case 'osVersion':
           return (b.osVersion || '').localeCompare(a.osVersion || '');
         case 'serialNumber':

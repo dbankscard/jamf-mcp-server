@@ -334,7 +334,8 @@ export async function executeGetPolicyAnalysis(
   jamfClient: any,
   params: z.infer<typeof GetPolicyAnalysisSchema>,
 ): Promise<any> {
-  let { policyId, policyName } = params;
+  let { policyId } = params;
+  const { policyName } = params;
   logger.info(`Executing compound tool: getPolicyAnalysis (id=${policyId}, name=${policyName})`);
 
   if (!policyId && !policyName) {

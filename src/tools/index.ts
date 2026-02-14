@@ -226,65 +226,77 @@ const GetPoliciesUsingPackageSchema = z.object({
   packageId: z.string().describe('The Jamf package ID'),
 });
 
-// Policy management schemas
+// Policy management schemas — shared fields extracted to avoid duplication
+const PolicyGeneralFields = {
+  enabled: z.boolean().optional().describe('Whether the policy is enabled'),
+  trigger: z.string().optional().describe('Policy trigger type'),
+  trigger_checkin: z.boolean().optional().describe('Trigger on check-in'),
+  trigger_enrollment_complete: z.boolean().optional().describe('Trigger on enrollment complete'),
+  trigger_login: z.boolean().optional().describe('Trigger on login'),
+  trigger_logout: z.boolean().optional().describe('Trigger on logout'),
+  trigger_network_state_changed: z.boolean().optional().describe('Trigger on network state change'),
+  trigger_startup: z.boolean().optional().describe('Trigger on startup'),
+  trigger_other: z.string().optional().describe('Custom trigger name'),
+  frequency: z.string().optional().describe('Execution frequency (Once per computer, Once per user, etc.)'),
+  retry_event: z.string().optional().describe('Retry event type'),
+  retry_attempts: z.number().optional().describe('Number of retry attempts'),
+  notify_on_each_failed_retry: z.boolean().optional().describe('Notify on each failed retry'),
+  location_user_only: z.boolean().optional().describe('Location information collected from user only'),
+  target_drive: z.string().optional().describe('Target drive for installations'),
+  offline: z.boolean().optional().describe('Make available offline'),
+  category: z.string().optional().describe('Policy category'),
+};
+
+const PolicyScopeSchema = z.object({
+  all_computers: z.boolean().optional().describe('Apply to all computers'),
+  computers: z.array(z.object({ id: z.number() })).optional().describe('Specific computers'),
+  computer_groups: z.array(z.object({ id: z.number() })).optional().describe('Computer groups'),
+  buildings: z.array(z.object({ id: z.number() })).optional().describe('Buildings'),
+  departments: z.array(z.object({ id: z.number() })).optional().describe('Departments'),
+}).optional();
+
+const PolicySelfServiceSchema = z.object({
+  use_for_self_service: z.boolean().optional().describe('Make available in Self Service'),
+  self_service_display_name: z.string().optional().describe('Display name in Self Service'),
+  install_button_text: z.string().optional().describe('Install button text'),
+  reinstall_button_text: z.string().optional().describe('Reinstall button text'),
+  self_service_description: z.string().optional().describe('Description in Self Service'),
+  force_users_to_view_description: z.boolean().optional().describe('Force users to view description'),
+  feature_on_main_page: z.boolean().optional().describe('Feature on main page'),
+}).optional();
+
+const PolicyPackageConfigSchema = z.object({
+  packages: z.array(z.object({
+    id: z.number().describe('Package ID'),
+    action: z.string().optional().describe('Install action'),
+    fut: z.boolean().optional().describe('Fill user templates'),
+    feu: z.boolean().optional().describe('Fill existing users'),
+  })).optional().describe('Packages to deploy'),
+}).optional();
+
+const PolicyScriptsSchema = z.array(z.object({
+  id: z.number().describe('Script ID'),
+  priority: z.string().optional().describe('Script priority (Before, After)'),
+  parameter4: z.string().optional().describe('Script parameter 4'),
+  parameter5: z.string().optional().describe('Script parameter 5'),
+  parameter6: z.string().optional().describe('Script parameter 6'),
+  parameter7: z.string().optional().describe('Script parameter 7'),
+  parameter8: z.string().optional().describe('Script parameter 8'),
+  parameter9: z.string().optional().describe('Script parameter 9'),
+  parameter10: z.string().optional().describe('Script parameter 10'),
+  parameter11: z.string().optional().describe('Script parameter 11'),
+})).optional().describe('Scripts to run');
+
 const CreatePolicySchema = z.object({
   policyData: z.object({
     general: z.object({
       name: z.string().describe('Policy name'),
-      enabled: z.boolean().optional().describe('Whether the policy is enabled'),
-      trigger: z.string().optional().describe('Policy trigger type'),
-      trigger_checkin: z.boolean().optional().describe('Trigger on check-in'),
-      trigger_enrollment_complete: z.boolean().optional().describe('Trigger on enrollment complete'),
-      trigger_login: z.boolean().optional().describe('Trigger on login'),
-      trigger_logout: z.boolean().optional().describe('Trigger on logout'),
-      trigger_network_state_changed: z.boolean().optional().describe('Trigger on network state change'),
-      trigger_startup: z.boolean().optional().describe('Trigger on startup'),
-      trigger_other: z.string().optional().describe('Custom trigger name'),
-      frequency: z.string().optional().describe('Execution frequency (Once per computer, Once per user, etc.)'),
-      retry_event: z.string().optional().describe('Retry event type'),
-      retry_attempts: z.number().optional().describe('Number of retry attempts'),
-      notify_on_each_failed_retry: z.boolean().optional().describe('Notify on each failed retry'),
-      location_user_only: z.boolean().optional().describe('Location information collected from user only'),
-      target_drive: z.string().optional().describe('Target drive for installations'),
-      offline: z.boolean().optional().describe('Make available offline'),
-      category: z.string().optional().describe('Policy category'),
+      ...PolicyGeneralFields,
     }).describe('General policy settings'),
-    scope: z.object({
-      all_computers: z.boolean().optional().describe('Apply to all computers'),
-      computers: z.array(z.object({ id: z.number() })).optional().describe('Specific computers'),
-      computer_groups: z.array(z.object({ id: z.number() })).optional().describe('Computer groups'),
-      buildings: z.array(z.object({ id: z.number() })).optional().describe('Buildings'),
-      departments: z.array(z.object({ id: z.number() })).optional().describe('Departments'),
-    }).optional().describe('Policy scope settings'),
-    self_service: z.object({
-      use_for_self_service: z.boolean().optional().describe('Make available in Self Service'),
-      self_service_display_name: z.string().optional().describe('Display name in Self Service'),
-      install_button_text: z.string().optional().describe('Install button text'),
-      reinstall_button_text: z.string().optional().describe('Reinstall button text'),
-      self_service_description: z.string().optional().describe('Description in Self Service'),
-      force_users_to_view_description: z.boolean().optional().describe('Force users to view description'),
-      feature_on_main_page: z.boolean().optional().describe('Feature on main page'),
-    }).optional().describe('Self Service settings'),
-    package_configuration: z.object({
-      packages: z.array(z.object({
-        id: z.number().describe('Package ID'),
-        action: z.string().optional().describe('Install action'),
-        fut: z.boolean().optional().describe('Fill user templates'),
-        feu: z.boolean().optional().describe('Fill existing users'),
-      })).optional().describe('Packages to deploy'),
-    }).optional().describe('Package configuration'),
-    scripts: z.array(z.object({
-      id: z.number().describe('Script ID'),
-      priority: z.string().optional().describe('Script priority (Before, After)'),
-      parameter4: z.string().optional().describe('Script parameter 4'),
-      parameter5: z.string().optional().describe('Script parameter 5'),
-      parameter6: z.string().optional().describe('Script parameter 6'),
-      parameter7: z.string().optional().describe('Script parameter 7'),
-      parameter8: z.string().optional().describe('Script parameter 8'),
-      parameter9: z.string().optional().describe('Script parameter 9'),
-      parameter10: z.string().optional().describe('Script parameter 10'),
-      parameter11: z.string().optional().describe('Script parameter 11'),
-    })).optional().describe('Scripts to run'),
+    scope: PolicyScopeSchema.describe('Policy scope settings'),
+    self_service: PolicySelfServiceSchema.describe('Self Service settings'),
+    package_configuration: PolicyPackageConfigSchema.describe('Package configuration'),
+    scripts: PolicyScriptsSchema,
   }).describe('Policy configuration data'),
   confirm: z.boolean().optional().default(false).describe('Confirmation flag for policy creation'),
 });
@@ -294,60 +306,12 @@ const UpdatePolicySchema = z.object({
   policyData: z.object({
     general: z.object({
       name: z.string().optional().describe('Policy name'),
-      enabled: z.boolean().optional().describe('Whether the policy is enabled'),
-      trigger: z.string().optional().describe('Policy trigger type'),
-      trigger_checkin: z.boolean().optional().describe('Trigger on check-in'),
-      trigger_enrollment_complete: z.boolean().optional().describe('Trigger on enrollment complete'),
-      trigger_login: z.boolean().optional().describe('Trigger on login'),
-      trigger_logout: z.boolean().optional().describe('Trigger on logout'),
-      trigger_network_state_changed: z.boolean().optional().describe('Trigger on network state change'),
-      trigger_startup: z.boolean().optional().describe('Trigger on startup'),
-      trigger_other: z.string().optional().describe('Custom trigger name'),
-      frequency: z.string().optional().describe('Execution frequency'),
-      retry_event: z.string().optional().describe('Retry event type'),
-      retry_attempts: z.number().optional().describe('Number of retry attempts'),
-      notify_on_each_failed_retry: z.boolean().optional().describe('Notify on each failed retry'),
-      location_user_only: z.boolean().optional().describe('Location information collected from user only'),
-      target_drive: z.string().optional().describe('Target drive for installations'),
-      offline: z.boolean().optional().describe('Make available offline'),
-      category: z.string().optional().describe('Policy category'),
+      ...PolicyGeneralFields,
     }).optional().describe('General policy settings to update'),
-    scope: z.object({
-      all_computers: z.boolean().optional().describe('Apply to all computers'),
-      computers: z.array(z.object({ id: z.number() })).optional().describe('Specific computers'),
-      computer_groups: z.array(z.object({ id: z.number() })).optional().describe('Computer groups'),
-      buildings: z.array(z.object({ id: z.number() })).optional().describe('Buildings'),
-      departments: z.array(z.object({ id: z.number() })).optional().describe('Departments'),
-    }).optional().describe('Policy scope settings to update'),
-    self_service: z.object({
-      use_for_self_service: z.boolean().optional().describe('Make available in Self Service'),
-      self_service_display_name: z.string().optional().describe('Display name in Self Service'),
-      install_button_text: z.string().optional().describe('Install button text'),
-      reinstall_button_text: z.string().optional().describe('Reinstall button text'),
-      self_service_description: z.string().optional().describe('Description in Self Service'),
-      force_users_to_view_description: z.boolean().optional().describe('Force users to view description'),
-      feature_on_main_page: z.boolean().optional().describe('Feature on main page'),
-    }).optional().describe('Self Service settings to update'),
-    package_configuration: z.object({
-      packages: z.array(z.object({
-        id: z.number().describe('Package ID'),
-        action: z.string().optional().describe('Install action'),
-        fut: z.boolean().optional().describe('Fill user templates'),
-        feu: z.boolean().optional().describe('Fill existing users'),
-      })).optional().describe('Packages to deploy'),
-    }).optional().describe('Package configuration to update'),
-    scripts: z.array(z.object({
-      id: z.number().describe('Script ID'),
-      priority: z.string().optional().describe('Script priority (Before, After)'),
-      parameter4: z.string().optional().describe('Script parameter 4'),
-      parameter5: z.string().optional().describe('Script parameter 5'),
-      parameter6: z.string().optional().describe('Script parameter 6'),
-      parameter7: z.string().optional().describe('Script parameter 7'),
-      parameter8: z.string().optional().describe('Script parameter 8'),
-      parameter9: z.string().optional().describe('Script parameter 9'),
-      parameter10: z.string().optional().describe('Script parameter 10'),
-      parameter11: z.string().optional().describe('Script parameter 11'),
-    })).optional().describe('Scripts to run'),
+    scope: PolicyScopeSchema.describe('Policy scope settings to update'),
+    self_service: PolicySelfServiceSchema.describe('Self Service settings to update'),
+    package_configuration: PolicyPackageConfigSchema.describe('Package configuration to update'),
+    scripts: PolicyScriptsSchema,
   }).describe('Policy configuration data to update'),
   confirm: z.boolean().optional().default(false).describe('Confirmation flag for policy update'),
 });
@@ -387,26 +351,31 @@ const SearchScriptsSchema = z.object({
   limit: z.number().optional().default(50).describe('Maximum number of results'),
 });
 
+// Script schemas — shared fields extracted to avoid duplication
+const ScriptOptionalFields = {
+  category: z.string().optional().describe('Script category'),
+  info: z.string().optional().describe('Script info/description'),
+  notes: z.string().optional().describe('Script notes'),
+  priority: z.string().optional().describe('Script priority'),
+  parameters: z.object({
+    parameter4: z.string().optional().describe('Parameter 4 label'),
+    parameter5: z.string().optional().describe('Parameter 5 label'),
+    parameter6: z.string().optional().describe('Parameter 6 label'),
+    parameter7: z.string().optional().describe('Parameter 7 label'),
+    parameter8: z.string().optional().describe('Parameter 8 label'),
+    parameter9: z.string().optional().describe('Parameter 9 label'),
+    parameter10: z.string().optional().describe('Parameter 10 label'),
+    parameter11: z.string().optional().describe('Parameter 11 label'),
+  }).optional().describe('Script parameter labels'),
+  os_requirements: z.string().optional().describe('OS requirements'),
+  script_contents_encoded: z.boolean().optional().describe('Whether script contents are encoded'),
+};
+
 const CreateScriptSchema = z.object({
   scriptData: z.object({
     name: z.string().describe('Script name'),
     script_contents: z.string().describe('Script contents'),
-    category: z.string().optional().describe('Script category'),
-    info: z.string().optional().describe('Script info/description'),
-    notes: z.string().optional().describe('Script notes'),
-    priority: z.string().optional().describe('Script priority'),
-    parameters: z.object({
-      parameter4: z.string().optional().describe('Parameter 4 label'),
-      parameter5: z.string().optional().describe('Parameter 5 label'),
-      parameter6: z.string().optional().describe('Parameter 6 label'),
-      parameter7: z.string().optional().describe('Parameter 7 label'),
-      parameter8: z.string().optional().describe('Parameter 8 label'),
-      parameter9: z.string().optional().describe('Parameter 9 label'),
-      parameter10: z.string().optional().describe('Parameter 10 label'),
-      parameter11: z.string().optional().describe('Parameter 11 label'),
-    }).optional().describe('Script parameter labels'),
-    os_requirements: z.string().optional().describe('OS requirements'),
-    script_contents_encoded: z.boolean().optional().describe('Whether script contents are encoded'),
+    ...ScriptOptionalFields,
   }).describe('Script configuration data'),
   confirm: z.boolean().optional().default(false).describe('Confirmation flag for script creation'),
 });
@@ -416,22 +385,7 @@ const UpdateScriptSchema = z.object({
   scriptData: z.object({
     name: z.string().optional().describe('Script name'),
     script_contents: z.string().optional().describe('Script contents'),
-    category: z.string().optional().describe('Script category'),
-    info: z.string().optional().describe('Script info/description'),
-    notes: z.string().optional().describe('Script notes'),
-    priority: z.string().optional().describe('Script priority'),
-    parameters: z.object({
-      parameter4: z.string().optional().describe('Parameter 4 label'),
-      parameter5: z.string().optional().describe('Parameter 5 label'),
-      parameter6: z.string().optional().describe('Parameter 6 label'),
-      parameter7: z.string().optional().describe('Parameter 7 label'),
-      parameter8: z.string().optional().describe('Parameter 8 label'),
-      parameter9: z.string().optional().describe('Parameter 9 label'),
-      parameter10: z.string().optional().describe('Parameter 10 label'),
-      parameter11: z.string().optional().describe('Parameter 11 label'),
-    }).optional().describe('Script parameter labels'),
-    os_requirements: z.string().optional().describe('OS requirements'),
-    script_contents_encoded: z.boolean().optional().describe('Whether script contents are encoded'),
+    ...ScriptOptionalFields,
   }).describe('Script configuration data to update'),
   confirm: z.boolean().optional().default(false).describe('Confirmation flag for script update'),
 });
@@ -640,14 +594,19 @@ const GetRestrictedSoftwareDetailsSchema = z.object({
   softwareId: z.string().describe('The restricted software ID'),
 });
 
+// Restricted Software schemas — shared fields extracted to avoid duplication
+const RestrictedSoftwareOptionalFields = {
+  matchExactProcessName: z.boolean().optional().describe('Match exact process name (default true)'),
+  killProcess: z.boolean().optional().describe('Kill process when found'),
+  deleteExecutable: z.boolean().optional().describe('Delete the application executable'),
+  sendNotification: z.boolean().optional().describe('Send notification to user on violation'),
+};
+
 const CreateRestrictedSoftwareSchema = z.object({
   restrictedSoftwareData: z.object({
     displayName: z.string().describe('Descriptive name for the restriction'),
     processName: z.string().describe('Exact process/app name to restrict (e.g. "Chess.app")'),
-    matchExactProcessName: z.boolean().optional().describe('Match exact process name (default true)'),
-    killProcess: z.boolean().optional().describe('Kill process when found'),
-    deleteExecutable: z.boolean().optional().describe('Delete the application executable'),
-    sendNotification: z.boolean().optional().describe('Send notification to user on violation'),
+    ...RestrictedSoftwareOptionalFields,
   }).describe('Restricted software configuration data'),
   confirm: z.boolean().optional().default(false).describe('Confirmation flag for restricted software creation'),
 });
@@ -657,10 +616,7 @@ const UpdateRestrictedSoftwareSchema = z.object({
   restrictedSoftwareData: z.object({
     displayName: z.string().optional().describe('Descriptive name for the restriction'),
     processName: z.string().optional().describe('Exact process/app name to restrict (e.g. "Chess.app")'),
-    matchExactProcessName: z.boolean().optional().describe('Match exact process name'),
-    killProcess: z.boolean().optional().describe('Kill process when found'),
-    deleteExecutable: z.boolean().optional().describe('Delete the application executable'),
-    sendNotification: z.boolean().optional().describe('Send notification to user on violation'),
+    ...RestrictedSoftwareOptionalFields,
   }).describe('Restricted software fields to update'),
   confirm: z.boolean().optional().default(false).describe('Confirmation flag for restricted software update'),
 });

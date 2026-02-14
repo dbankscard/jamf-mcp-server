@@ -58,8 +58,6 @@ export async function batchInventoryUpdate(
     }
 
     // Update inventory in batches
-    const updatePromises = [];
-    
     for (let i = 0; i < deviceIds.length; i += maxConcurrent) {
       const batch = deviceIds.slice(i, i + maxConcurrent);
       
