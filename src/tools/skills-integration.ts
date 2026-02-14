@@ -4,22 +4,23 @@
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { 
-  CallToolRequestSchema, 
+import {
+  CallToolRequestSchema,
   ListToolsRequestSchema,
-  Tool, 
-  TextContent 
+  Tool,
+  TextContent
 } from '@modelcontextprotocol/sdk/types.js';
 import { SkillsManager } from '../skills/manager.js';
+import { IJamfApiClient } from '../types/jamf-client.js';
 
 // Store original handlers
 let originalListToolsHandler: any = null;
 let originalCallToolHandler: any = null;
 
 export function integrateSkillsWithTools(
-  server: Server, 
+  server: Server,
   skillsManager: SkillsManager,
-  jamfClient: any
+  jamfClient: IJamfApiClient
 ): void {
   // Initialize the skills manager with a proper context
   const skillContext = {

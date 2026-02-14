@@ -4,8 +4,9 @@ import {
   ReadResourceRequestSchema,
   Resource,
 } from '@modelcontextprotocol/sdk/types.js';
+import { IJamfApiClient } from '../types/jamf-client.js';
 
-export function registerResources(server: Server, jamfClient: any): void {
+export function registerResources(server: Server, jamfClient: IJamfApiClient): void {
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
     const resources: Resource[] = [
       {
@@ -492,8 +493,8 @@ export function registerResources(server: Server, jamfClient: any): void {
               jamfClient.listComputerPrestages().catch(() => []),
               jamfClient.listMobilePrestages().catch(() => []),
             ]);
-            const computerPrestages: any[] = Array.isArray(cpResult) ? cpResult : (cpResult?.results || []);
-            const mobilePrestages: any[] = Array.isArray(mpResult) ? mpResult : (mpResult?.results || []);
+            const computerPrestages: any[] = Array.isArray(cpResult) ? cpResult : ((cpResult as any)?.results || []);
+            const mobilePrestages: any[] = Array.isArray(mpResult) ? mpResult : ((mpResult as any)?.results || []);
 
             const content = {
               uri,

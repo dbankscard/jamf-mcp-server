@@ -6,9 +6,10 @@
 import { SkillContext } from './types.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { IJamfApiClient } from '../types/jamf-client.js';
 
 interface JamfMCPServer extends Server {
-  jamfClient: any;
+  jamfClient: IJamfApiClient;
   handleToolCall: (name: string, args: any) => Promise<CallToolResult>;
 }
 

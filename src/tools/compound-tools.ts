@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { createLogger } from '../server/logger.js';
+import { IJamfApiClient } from '../types/jamf-client.js';
 
 const logger = createLogger('compound-tools');
 
@@ -72,7 +73,7 @@ export const GetPolicyAnalysisSchema = z.object({
 // Compound Tool: getFleetOverview
 // ==========================================
 
-export async function executeGetFleetOverview(jamfClient: any): Promise<any> {
+export async function executeGetFleetOverview(jamfClient: IJamfApiClient): Promise<any> {
   logger.info('Executing compound tool: getFleetOverview');
 
   const [inventorySummary, complianceSummary, mobileDevices] = await Promise.all([
@@ -131,7 +132,7 @@ export async function executeGetFleetOverview(jamfClient: any): Promise<any> {
 // ==========================================
 
 export async function executeGetDeviceFullProfile(
-  jamfClient: any,
+  jamfClient: IJamfApiClient,
   params: z.infer<typeof GetDeviceFullProfileSchema>,
 ): Promise<any> {
   const { identifier, includePolicyLogs, includeHistory } = params;
@@ -231,7 +232,7 @@ export async function executeGetDeviceFullProfile(
 // ==========================================
 
 export async function executeGetSecurityPosture(
-  jamfClient: any,
+  jamfClient: IJamfApiClient,
   params: z.infer<typeof GetSecurityPostureSchema>,
 ): Promise<any> {
   const { sampleSize, complianceDays } = params;
@@ -331,7 +332,7 @@ export async function executeGetSecurityPosture(
 // ==========================================
 
 export async function executeGetPolicyAnalysis(
-  jamfClient: any,
+  jamfClient: IJamfApiClient,
   params: z.infer<typeof GetPolicyAnalysisSchema>,
 ): Promise<any> {
   let { policyId } = params;
