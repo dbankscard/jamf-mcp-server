@@ -17,6 +17,9 @@ import {
   executeGetPolicyAnalysis,
 } from './compound-tools.js';
 import { enrichResponse, truncateToolResponse } from './response-enricher.js';
+import { createLogger } from '../server/logger.js';
+
+const logger = createLogger('tools');
 
 // Helper function to parse Jamf dates
 const parseJamfDate = (date: string | Date | undefined): Date => {
@@ -667,6 +670,22 @@ const DeleteRestrictedSoftwareSchema = z.object({
   confirm: z.boolean().optional().default(false).describe('Confirmation flag for restricted software deletion'),
 });
 
+const DeletePolicySchema = z.object({
+  policyId: z.string().describe('The policy ID to delete'),
+  confirm: z.boolean().optional().default(false).describe('Confirmation flag for policy deletion'),
+});
+
+const DeleteComputerExtensionAttributeSchema = z.object({
+  attributeId: z.string().describe('The extension attribute ID to delete'),
+  confirm: z.boolean().optional().default(false).describe('Confirmation flag for extension attribute deletion'),
+});
+
+const DeleteConfigurationProfileSchema = z.object({
+  profileId: z.string().describe('The configuration profile ID to delete'),
+  type: z.enum(['computer', 'mobiledevice']).optional().default('computer').describe('Type of configuration profile'),
+  confirm: z.boolean().optional().default(false).describe('Confirmation flag for configuration profile deletion'),
+});
+
 // Webhooks Schemas
 const ListWebhooksSchema = z.object({});
 
@@ -845,21 +864,6 @@ export function registerTools(server: Server, jamfClient: any): void {
             },
           },
           required: ['deviceIds'],
-        },
-        annotations: { readOnlyHint: true, destructiveHint: false },
-      },
-      {
-        name: 'debugDeviceDates',
-        description: 'Debug tool to see raw date fields from devices',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            limit: {
-              type: 'number',
-              description: 'Number of devices to check',
-              default: 3,
-            },
-          },
         },
         annotations: { readOnlyHint: true, destructiveHint: false },
       },
@@ -1118,6 +1122,32 @@ export function registerTools(server: Server, jamfClient: any): void {
             },
           },
           required: ['profileId', 'deviceIds'],
+        },
+        annotations: { readOnlyHint: false, destructiveHint: true },
+      },
+      {
+        name: 'deleteConfigurationProfile',
+        description: 'Delete a configuration profile from Jamf Pro (requires confirmation)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            profileId: {
+              type: 'string',
+              description: 'The configuration profile ID to delete',
+            },
+            type: {
+              type: 'string',
+              enum: ['computer', 'mobiledevice'],
+              description: 'Type of configuration profile',
+              default: 'computer',
+            },
+            confirm: {
+              type: 'boolean',
+              description: 'Confirmation flag for configuration profile deletion',
+              default: false,
+            },
+          },
+          required: ['profileId'],
         },
         annotations: { readOnlyHint: false, destructiveHint: true },
       },
@@ -1839,6 +1869,26 @@ export function registerTools(server: Server, jamfClient: any): void {
         annotations: { readOnlyHint: false, destructiveHint: false },
       },
       {
+        name: 'deletePolicy',
+        description: 'Delete a policy from Jamf Pro (requires confirmation)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            policyId: {
+              type: 'string',
+              description: 'The policy ID to delete',
+            },
+            confirm: {
+              type: 'boolean',
+              description: 'Confirmation flag for policy deletion',
+              default: false,
+            },
+          },
+          required: ['policyId'],
+        },
+        annotations: { readOnlyHint: false, destructiveHint: true },
+      },
+      {
         name: 'listScripts',
         description: 'List all scripts in Jamf Pro',
         inputSchema: {
@@ -2507,6 +2557,26 @@ export function registerTools(server: Server, jamfClient: any): void {
           required: ['attributeId'],
         },
         annotations: { readOnlyHint: false, destructiveHint: false },
+      },
+      {
+        name: 'deleteComputerExtensionAttribute',
+        description: 'Delete a computer Extension Attribute (requires confirmation)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            attributeId: {
+              type: 'string',
+              description: 'The Extension Attribute ID to delete',
+            },
+            confirm: {
+              type: 'boolean',
+              description: 'Confirmation flag for extension attribute deletion',
+              default: false,
+            },
+          },
+          required: ['attributeId'],
+        },
+        annotations: { readOnlyHint: false, destructiveHint: true },
       },
 
       // ==========================================
@@ -3286,65 +3356,18 @@ export function registerTools(server: Server, jamfClient: any): void {
           return { content: [content] };
         }
 
-        case 'debugDeviceDates': {
-          const { limit } = args as { limit?: number };
-          const devices = await jamfClient.searchComputers('', limit || 3);
-          
-          const debugInfo = {
-            deviceCount: devices.length,
-            sampleDevices: devices.map((device: any) => {
-              const dateFields: any = {};
-              
-              // Check all possible date field names
-              const possibleDateFields = [
-                'last_contact_time',
-                'last_contact_time_epoch', 
-                'last_contact_time_utc',
-                'lastContactTime',
-                'report_date',
-                'report_date_epoch',
-                'report_date_utc',
-                'reportDate'
-              ];
-              
-              possibleDateFields.forEach(field => {
-                if (device[field] !== undefined) {
-                  dateFields[field] = device[field];
-                }
-              });
-              
-              return {
-                id: device.id,
-                name: device.name,
-                allKeys: Object.keys(device),
-                dateFields: dateFields,
-                rawDevice: device
-              };
-            })
-          };
-          
-          const content: TextContent = {
-            type: 'text',
-            text: JSON.stringify(debugInfo, null, 2),
-          };
-          
-          return { content: [content] };
-        }
-
         case 'getDevicesBatch': {
           const { deviceIds } = GetDevicesBatchSchema.parse(args);
 
           const MAX_BATCH = 25;
           const cappedIds = deviceIds.slice(0, MAX_BATCH);
-          const devices = [];
-          const errors = [];
 
-          for (const deviceId of cappedIds) {
-            try {
+          // Fetch all devices in parallel for performance
+          const settled = await Promise.allSettled(
+            cappedIds.map(async (deviceId) => {
               const device = await jamfClient.getComputerDetails(deviceId);
-
-              // Always return trimmed fields to keep response small
-              devices.push({
+              return {
+                deviceId,
                 id: device.id?.toString(),
                 name: device.name || device.general?.name,
                 serialNumber: device.general?.serial_number || device.serialNumber,
@@ -3352,11 +3375,20 @@ export function registerTools(server: Server, jamfClient: any): void {
                 osVersion: device.hardware?.os_version || device.osVersion,
                 username: device.location?.username || device.username,
                 model: device.hardware?.model || device.hardware?.modelIdentifier,
-              });
-            } catch (error) {
+              };
+            }),
+          );
+
+          const devices = [];
+          const errors = [];
+          for (let i = 0; i < settled.length; i++) {
+            const outcome = settled[i];
+            if (outcome.status === 'fulfilled') {
+              devices.push(outcome.value);
+            } else {
               errors.push({
-                deviceId,
-                error: error instanceof Error ? error.message : 'Unknown error',
+                deviceId: cappedIds[i],
+                error: outcome.reason instanceof Error ? outcome.reason.message : 'Unknown error',
               });
             }
           }
@@ -3428,7 +3460,7 @@ export function registerTools(server: Server, jamfClient: any): void {
                     fullDetails: scriptDetails,
                   };
                 } catch (error) {
-                  console.error(`Failed to fetch script details for script ${script.id}:`, error);
+                  logger.error(`Failed to fetch script details for script ${script.id}`, { error: error instanceof Error ? error.message : String(error) });
                   policyDetails.scripts[i] = {
                     ...script,
                     scriptContentError: `Failed to fetch script content: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -3623,6 +3655,27 @@ export function registerTools(server: Server, jamfClient: any): void {
           const content: TextContent = {
             type: 'text',
             text: `Successfully removed ${type} configuration profile ${profileId} from ${deviceIds.length} device(s)`,
+          };
+
+          return { content: [content] };
+        }
+
+        case 'deleteConfigurationProfile': {
+          const { profileId, type, confirm } = DeleteConfigurationProfileSchema.parse(args);
+
+          if (!confirm) {
+            const content: TextContent = {
+              type: 'text',
+              text: 'Configuration profile deletion requires confirmation. Please set confirm: true to proceed.',
+            };
+            return { content: [content] };
+          }
+
+          await jamfClient.deleteConfigurationProfile(profileId, type);
+
+          const content: TextContent = {
+            type: 'text',
+            text: `Successfully deleted ${type} configuration profile ${profileId}`,
           };
 
           return { content: [content] };
@@ -3991,7 +4044,7 @@ export function registerTools(server: Server, jamfClient: any): void {
           const { deviceId, command, confirm } = SendMDMCommandSchema.parse(args);
           
           // Destructive commands require confirmation
-          const destructiveCommands = ['EraseDevice', 'ClearPasscode', 'ClearRestrictionsPassword'];
+          const destructiveCommands = ['EraseDevice', 'ClearPasscode', 'ClearRestrictionsPassword', 'DeviceLock'];
           if (destructiveCommands.includes(command) && !confirm) {
             const content: TextContent = {
               type: 'text',
@@ -4311,6 +4364,27 @@ export function registerTools(server: Server, jamfClient: any): void {
               },
               scopeUpdates: scopeUpdates,
             }, null, 2),
+          };
+
+          return { content: [content] };
+        }
+
+        case 'deletePolicy': {
+          const { policyId, confirm } = DeletePolicySchema.parse(args);
+
+          if (!confirm) {
+            const content: TextContent = {
+              type: 'text',
+              text: 'Policy deletion requires confirmation. Please set confirm: true to proceed.',
+            };
+            return { content: [content] };
+          }
+
+          await jamfClient.deletePolicy(policyId);
+
+          const content: TextContent = {
+            type: 'text',
+            text: `Successfully deleted policy ${policyId}`,
           };
 
           return { content: [content] };
@@ -4898,6 +4972,27 @@ export function registerTools(server: Server, jamfClient: any): void {
               message: `Successfully updated Extension Attribute ${attributeId}`,
               result,
             }, null, 2),
+          };
+
+          return { content: [content] };
+        }
+
+        case 'deleteComputerExtensionAttribute': {
+          const { attributeId, confirm } = DeleteComputerExtensionAttributeSchema.parse(args);
+
+          if (!confirm) {
+            const content: TextContent = {
+              type: 'text',
+              text: 'Extension Attribute deletion requires confirmation. Please set confirm: true to proceed.',
+            };
+            return { content: [content] };
+          }
+
+          await jamfClient.deleteComputerExtensionAttribute(attributeId);
+
+          const content: TextContent = {
+            type: 'text',
+            text: `Successfully deleted Extension Attribute ${attributeId}`,
           };
 
           return { content: [content] };

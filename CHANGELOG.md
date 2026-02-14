@@ -1,6 +1,39 @@
 # Changelog
 
-## [Unreleased] - Security and Production Hardening
+## [2.0.0] - 2026-02-14
+
+### Major Features
+- **106 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
+- **12 resources** — all returning live data including compliance, storage, OS versions, encryption, and patch reports
+- **12 workflow prompts** — guided templates for common admin tasks like onboarding, offboarding, security audits, and staged rollouts
+- **5 skills** — advanced multi-step operations for the ChatGPT connector
+
+### Compound Tools
+- **getFleetOverview**: Single-call fleet summary combining inventory counts, compliance rates, and mobile device status
+- **getDeviceFullProfile**: Complete device profile by name, serial, or ID with parallel API calls
+- **getSecurityPosture**: Fleet security analysis — encryption, compliance, and OS currency
+- **getPolicyAnalysis**: Policy analysis by ID or name with configuration, scope, and compliance
+
+### API Improvements
+- **Bearer Token authentication on Classic API** — full OAuth2 Client Credentials support without needing a username/password
+- **Parallel API calls** — batch operations and compound tools run requests concurrently for faster results
+- **Hybrid API client** — automatic fallback between Jamf Pro API and Classic API for maximum compatibility
+
+### New Tool Categories
+- Computer History and MDM Commands (getComputerHistory, sendComputerMDMCommand, flushMDMCommands)
+- Advanced Computer Searches (create, list, get, delete)
+- Managed Software Updates (listSoftwareUpdatePlans, createSoftwareUpdatePlan)
+- PreStage Enrollments (computer and mobile)
+- Network Segments
+- Accounts and Users
+- App Installers
+- Restricted Software (CRUD operations)
+- Webhooks
+- LAPS (Local Administrator Password Solution)
+- Patch Management
+- Extension Attributes (CRUD operations)
+- Policy management (create, update, clone, enable/disable, scope management)
+- Script management (create, update, delete)
 
 ### Security Fixes
 - **CRITICAL**: Re-enabled HTTPS certificate verification by default
@@ -38,26 +71,21 @@
   - Async operation timeouts
 
 - **Project Structure**: Cleaned up duplicate files
-  - Removed duplicate skills directory
   - Updated .gitignore to prevent future issues
   - Consistent import paths
 
 ### Documentation
-- Added comprehensive security documentation
-- Created Docker deployment guide
-- Updated environment variable documentation
-- Added connection pool configuration options
-
-### Developer Experience
-- All skills tests passing
-- Build process includes automatic testing
-- Improved TypeScript type safety
-- Better development tooling support
+- Comprehensive README with all 106 tools documented
+- Security documentation (SECURITY.md)
+- Docker deployment guide (DOCKER_DEPLOYMENT.md)
+- Error handling guide (ERROR_HANDLING.md)
+- Skills testing documentation
+- ChatGPT connector setup guides
 
 ### Testing & Quality
 - **Unit Tests**: Added comprehensive test suite
   - LRU cache tests with TTL and eviction
-  - Error handler utilities tests  
+  - Error handler utilities tests
   - Auth middleware tests with mocked dependencies
   - Skills manager tests covering all skills
   - Jest configuration with ESM support
@@ -74,7 +102,6 @@
   - Added common types for requests and responses
   - Type guards for safe error handling
   - Replaced 'any' types with proper interfaces
-  - Better IntelliSense support
 
 - **Health Checks**: Comprehensive monitoring endpoints
   - `/health` - Basic health status
@@ -82,6 +109,9 @@
   - `/health/live` - Kubernetes liveness probe
   - `/health/ready` - Kubernetes readiness probe
   - Checks: memory, Jamf API, connection pool, shutdown status
+
+- **Tool Annotations**: Each tool declares `readOnlyHint` and `destructiveHint` for client-side safety
+- **Correct Jamf terminology** — all documentation and tool descriptions align with official Jamf developer documentation
 
 ## [1.2.0] - Previous Release
 - Skills integration for Claude Desktop and ChatGPT

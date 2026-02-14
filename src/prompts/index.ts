@@ -539,7 +539,6 @@ This goes beyond basic troubleshooting to examine all configuration and manageme
 1. **Device identification and baseline**
    - Using searchDevices to find {{deviceName}} and get the device ID
    - Using getDeviceDetails for complete hardware specs, OS version, storage, user info, and management status
-   - Using debugDeviceDates to inspect raw date fields for any timestamp anomalies
 
 2. **Configuration profile analysis**
    - Using listConfigurationProfiles to enumerate all computer profiles

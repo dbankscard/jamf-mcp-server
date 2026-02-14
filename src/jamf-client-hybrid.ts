@@ -4,6 +4,7 @@ import { createLogger } from './server/logger.js';
 import { getDefaultAgentPool } from './utils/http-agent-pool.js';
 import { JamfComputer, JamfComputerDetails, JamfSearchResponse, JamfApiResponse } from './types/jamf-api.js';
 import { isAxiosError, getErrorMessage, getAxiosErrorStatus, getAxiosErrorData } from './utils/type-guards.js';
+import { JamfAPIError, NetworkError, AuthenticationError } from './utils/errors.js';
 import { LRUCache } from './utils/lru-cache.js';
 
 const logger = createLogger('jamf-client-hybrid');
@@ -334,7 +335,7 @@ export class JamfApiClientHybrid {
       const computers = response.data.computers || [];
       return computers.length;
     } catch (error) {
-      logger.info('Classic API count failed:', error);
+      logger.debug('Classic API count failed:', error);
     }
 
     return 0;
@@ -385,7 +386,7 @@ export class JamfApiClientHybrid {
     } catch (error) {
       const axiosError = error as AxiosError;
       if (axiosError.response?.status === 403) {
-        logger.info('Jamf Pro API search returned 403, trying Classic API...');
+        logger.debug('Jamf Pro API search returned 403, trying Classic API...');
       } else {
         logger.debug('Jamf Pro API search failed, falling back to Classic API', {
           error: error instanceof Error ? error.message : String(error),
@@ -407,9 +408,9 @@ export class JamfApiClientHybrid {
         return computers.slice(0, limit).map((c: any) => this.transformClassicComputer(c));
       }
     } catch (error) {
-      logger.info('Classic API search failed:', error);
+      logger.debug('Classic API search failed, falling back to Advanced Search', { error: getErrorMessage(error) });
     }
-    
+
     // Fall back to Advanced Search
     logger.info('Falling back to Advanced Search...');
     return this.searchComputersViaAdvancedSearch(query, limit);
@@ -513,12 +514,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/JSSResource/computers/id/${id}`);
       return response.data.computer;
     } catch (error) {
-      const axiosError = error as AxiosError;
-      logger.error('Failed to get computer details from both APIs', {
-        computerId: id,
-        error: error instanceof Error ? error.message : String(error),
-        status: axiosError.response?.status
-      });
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getComputerDetails', computerId: id });
+      }
+      logger.error('Failed to get computer details from both APIs', { error: getErrorMessage(error), computerId: id });
       throw error;
     }
   }
@@ -602,7 +601,7 @@ export class JamfApiClientHybrid {
       logger.info(`Inventory update requested for device ${deviceId} via Jamf Pro API`);
     } catch (error) {
       if (getAxiosErrorStatus(error) === 404 || getAxiosErrorStatus(error) === 403) {
-        logger.info('Jamf Pro API failed, trying Classic API computercommands...');
+        logger.debug('Jamf Pro API failed, trying Classic API computercommands...');
         // Try Classic API using the correct endpoint
         try {
           await this.axiosInstance.post(`/JSSResource/computercommands/command/UpdateInventory`, {
@@ -610,7 +609,10 @@ export class JamfApiClientHybrid {
           });
           logger.info(`Inventory update requested for device ${deviceId} via Classic API`);
         } catch (classicError) {
-          logger.info('Classic API computercommands failed:', classicError);
+          if (isAxiosError(classicError)) {
+            throw JamfAPIError.fromAxiosError(classicError, { operation: 'updateDeviceInventory', deviceId });
+          }
+          logger.error('Classic API computercommands failed:', { error: getErrorMessage(classicError) });
           throw classicError;
         }
       } else {
@@ -630,34 +632,31 @@ export class JamfApiClientHybrid {
         const policies = response.data.policies || [];
         return policies.slice(0, limit);
       } catch (error) {
-        logger.info('Failed to list policies:', error);
+        logger.error('Failed to list policies:', { error: getErrorMessage(error) });
         return [];
       }
     });
   }
 
-  // Search policies
+  // Search policies (uses cached listPolicies internally)
   async searchPolicies(query: string, limit: number = 100): Promise<any[]> {
-    await this.ensureAuthenticated();
-    
     try {
-      // Get all policies and filter
-      const response = await this.axiosInstance.get('/JSSResource/policies');
-      const policies = response.data.policies || [];
-      
+      // Use cached listPolicies to avoid redundant API calls
+      const policies = await this.listPolicies(1000);
+
       if (!query) {
         return policies.slice(0, limit);
       }
-      
+
       const lowerQuery = query.toLowerCase();
-      const filtered = policies.filter((p: any) => 
+      const filtered = policies.filter((p: any) =>
         p.name?.toLowerCase().includes(lowerQuery) ||
         p.id?.toString().includes(query)
       );
-      
+
       return filtered.slice(0, limit);
     } catch (error) {
-      logger.info('Failed to search policies:', error);
+      logger.error('Failed to search policies:', { error: getErrorMessage(error) });
       return [];
     }
   }
@@ -670,7 +669,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/JSSResource/policies/id/${policyId}`);
       return response.data.policy;
     } catch (error) {
-      logger.info('Failed to get policy details:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getPolicyDetails', policyId });
+      }
+      logger.error('Failed to get policy details:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -693,8 +695,8 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.post('/api/v1/policies', policyData);
       return response.data;
     } catch (error) {
-      logger.info(`Jamf Pro API failed with status ${getAxiosErrorStatus(error)}, trying Classic API...`);
-      logger.info('Error details:', getAxiosErrorData(error));
+      logger.debug(`Jamf Pro API failed with status ${getAxiosErrorStatus(error)}, trying Classic API...`);
+      logger.debug('Error details:', getAxiosErrorData(error));
       // Fall back to Classic API for any error
     }
     
@@ -728,7 +730,10 @@ export class JamfApiClientHybrid {
       
       return { success: true };
     } catch (classicError) {
-      logger.info('Classic API also failed:', classicError);
+      if (isAxiosError(classicError)) {
+        throw JamfAPIError.fromAxiosError(classicError, { operation: 'createPolicy' });
+      }
+      logger.error('Classic API also failed:', { error: getErrorMessage(classicError) });
       throw classicError;
     }
   }
@@ -750,8 +755,8 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.put(`/api/v1/policies/${policyId}`, policyData);
       return response.data;
     } catch (error) {
-      logger.info(`Jamf Pro API failed with status ${getAxiosErrorStatus(error)}, trying Classic API...`);
-      logger.info('Error details:', getAxiosErrorData(error));
+      logger.debug(`Jamf Pro API failed with status ${getAxiosErrorStatus(error)}, trying Classic API...`);
+      logger.debug('Error details:', getAxiosErrorData(error));
       // Fall back to Classic API for any error
     }
     
@@ -776,7 +781,10 @@ export class JamfApiClientHybrid {
       // Fetch and return the updated policy details
       return await this.getPolicyDetails(policyId);
     } catch (classicError) {
-      logger.info('Classic API also failed:', classicError);
+      if (isAxiosError(classicError)) {
+        throw JamfAPIError.fromAxiosError(classicError, { operation: 'updatePolicy', policyId });
+      }
+      logger.error('Classic API also failed:', { error: getErrorMessage(classicError) });
       throw classicError;
     }
   }
@@ -808,7 +816,10 @@ export class JamfApiClientHybrid {
       // Create the new policy
       return await this.createPolicy(clonedPolicy);
     } catch (error) {
-      logger.info('Failed to clone policy:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'clonePolicy', sourcePolicyId });
+      }
+      logger.error('Failed to clone policy:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -836,7 +847,10 @@ export class JamfApiClientHybrid {
       
       return await this.updatePolicy(policyId, updateData);
     } catch (error) {
-      logger.info(`Failed to ${enabled ? 'enable' : 'disable'} policy:`, error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'setPolicyEnabled', policyId });
+      }
+      logger.error(`Failed to ${enabled ? 'enable' : 'disable'} policy:`, { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -909,7 +923,33 @@ export class JamfApiClientHybrid {
       
       return await this.updatePolicy(policyId, updateData);
     } catch (error) {
-      logger.info('Failed to update policy scope:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'updatePolicyScope', policyId });
+      }
+      logger.error('Failed to update policy scope:', { error: getErrorMessage(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a policy
+   */
+  async deletePolicy(policyId: string): Promise<void> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot delete policies in read-only mode');
+    }
+
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Deleting policy ${policyId} using Classic API...`);
+      await this.axiosInstance.delete(`/JSSResource/policies/id/${policyId}`);
+      logger.info(`Successfully deleted policy ${policyId}`);
+    } catch (error) {
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'deletePolicy', policyId });
+      }
+      logger.error('Failed to delete policy:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -918,38 +958,29 @@ export class JamfApiClientHybrid {
    * Build XML payload for policy creation/update
    */
   private buildPolicyXml(policyData: any): string {
-    const escapeXml = (str: string): string => {
-      return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-    };
-    
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<policy>\n';
     
     // General settings
     if (policyData.general) {
       xml += '  <general>\n';
-      if (policyData.general.name) xml += `    <name>${escapeXml(policyData.general.name)}</name>\n`;
+      if (policyData.general.name) xml += `    <name>${this.escapeXml(policyData.general.name)}</name>\n`;
       if (policyData.general.enabled !== undefined) xml += `    <enabled>${policyData.general.enabled}</enabled>\n`;
-      if (policyData.general.trigger) xml += `    <trigger>${escapeXml(policyData.general.trigger)}</trigger>\n`;
+      if (policyData.general.trigger) xml += `    <trigger>${this.escapeXml(policyData.general.trigger)}</trigger>\n`;
       if (policyData.general.trigger_checkin !== undefined) xml += `    <trigger_checkin>${policyData.general.trigger_checkin}</trigger_checkin>\n`;
       if (policyData.general.trigger_enrollment_complete !== undefined) xml += `    <trigger_enrollment_complete>${policyData.general.trigger_enrollment_complete}</trigger_enrollment_complete>\n`;
       if (policyData.general.trigger_login !== undefined) xml += `    <trigger_login>${policyData.general.trigger_login}</trigger_login>\n`;
       if (policyData.general.trigger_logout !== undefined) xml += `    <trigger_logout>${policyData.general.trigger_logout}</trigger_logout>\n`;
       if (policyData.general.trigger_network_state_changed !== undefined) xml += `    <trigger_network_state_changed>${policyData.general.trigger_network_state_changed}</trigger_network_state_changed>\n`;
       if (policyData.general.trigger_startup !== undefined) xml += `    <trigger_startup>${policyData.general.trigger_startup}</trigger_startup>\n`;
-      if (policyData.general.trigger_other) xml += `    <trigger_other>${escapeXml(policyData.general.trigger_other)}</trigger_other>\n`;
-      if (policyData.general.frequency) xml += `    <frequency>${escapeXml(policyData.general.frequency)}</frequency>\n`;
-      if (policyData.general.retry_event) xml += `    <retry_event>${escapeXml(policyData.general.retry_event)}</retry_event>\n`;
+      if (policyData.general.trigger_other) xml += `    <trigger_other>${this.escapeXml(policyData.general.trigger_other)}</trigger_other>\n`;
+      if (policyData.general.frequency) xml += `    <frequency>${this.escapeXml(policyData.general.frequency)}</frequency>\n`;
+      if (policyData.general.retry_event) xml += `    <retry_event>${this.escapeXml(policyData.general.retry_event)}</retry_event>\n`;
       if (policyData.general.retry_attempts !== undefined) xml += `    <retry_attempts>${policyData.general.retry_attempts}</retry_attempts>\n`;
       if (policyData.general.notify_on_each_failed_retry !== undefined) xml += `    <notify_on_each_failed_retry>${policyData.general.notify_on_each_failed_retry}</notify_on_each_failed_retry>\n`;
       if (policyData.general.location_user_only !== undefined) xml += `    <location_user_only>${policyData.general.location_user_only}</location_user_only>\n`;
-      if (policyData.general.target_drive) xml += `    <target_drive>${escapeXml(policyData.general.target_drive)}</target_drive>\n`;
+      if (policyData.general.target_drive) xml += `    <target_drive>${this.escapeXml(policyData.general.target_drive)}</target_drive>\n`;
       if (policyData.general.offline !== undefined) xml += `    <offline>${policyData.general.offline}</offline>\n`;
-      if (policyData.general.category) xml += `    <category>${escapeXml(policyData.general.category)}</category>\n`;
+      if (policyData.general.category) xml += `    <category>${this.escapeXml(policyData.general.category)}</category>\n`;
       xml += '  </general>\n';
     }
     
@@ -994,10 +1025,10 @@ export class JamfApiClientHybrid {
     if (policyData.self_service) {
       xml += '  <self_service>\n';
       if (policyData.self_service.use_for_self_service !== undefined) xml += `    <use_for_self_service>${policyData.self_service.use_for_self_service}</use_for_self_service>\n`;
-      if (policyData.self_service.self_service_display_name) xml += `    <self_service_display_name>${escapeXml(policyData.self_service.self_service_display_name)}</self_service_display_name>\n`;
-      if (policyData.self_service.install_button_text) xml += `    <install_button_text>${escapeXml(policyData.self_service.install_button_text)}</install_button_text>\n`;
-      if (policyData.self_service.reinstall_button_text) xml += `    <reinstall_button_text>${escapeXml(policyData.self_service.reinstall_button_text)}</reinstall_button_text>\n`;
-      if (policyData.self_service.self_service_description) xml += `    <self_service_description>${escapeXml(policyData.self_service.self_service_description)}</self_service_description>\n`;
+      if (policyData.self_service.self_service_display_name) xml += `    <self_service_display_name>${this.escapeXml(policyData.self_service.self_service_display_name)}</self_service_display_name>\n`;
+      if (policyData.self_service.install_button_text) xml += `    <install_button_text>${this.escapeXml(policyData.self_service.install_button_text)}</install_button_text>\n`;
+      if (policyData.self_service.reinstall_button_text) xml += `    <reinstall_button_text>${this.escapeXml(policyData.self_service.reinstall_button_text)}</reinstall_button_text>\n`;
+      if (policyData.self_service.self_service_description) xml += `    <self_service_description>${this.escapeXml(policyData.self_service.self_service_description)}</self_service_description>\n`;
       if (policyData.self_service.force_users_to_view_description !== undefined) xml += `    <force_users_to_view_description>${policyData.self_service.force_users_to_view_description}</force_users_to_view_description>\n`;
       if (policyData.self_service.feature_on_main_page !== undefined) xml += `    <feature_on_main_page>${policyData.self_service.feature_on_main_page}</feature_on_main_page>\n`;
       xml += '  </self_service>\n';
@@ -1011,7 +1042,7 @@ export class JamfApiClientHybrid {
         policyData.package_configuration.packages.forEach((pkg: any) => {
           xml += '      <package>\n';
           xml += `        <id>${pkg.id}</id>\n`;
-          if (pkg.action) xml += `        <action>${escapeXml(pkg.action)}</action>\n`;
+          if (pkg.action) xml += `        <action>${this.escapeXml(pkg.action)}</action>\n`;
           if (pkg.fut !== undefined) xml += `        <fut>${pkg.fut}</fut>\n`;
           if (pkg.feu !== undefined) xml += `        <feu>${pkg.feu}</feu>\n`;
           xml += '      </package>\n';
@@ -1027,15 +1058,15 @@ export class JamfApiClientHybrid {
       policyData.scripts.forEach((script: any) => {
         xml += '    <script>\n';
         xml += `      <id>${script.id}</id>\n`;
-        if (script.priority) xml += `      <priority>${escapeXml(script.priority)}</priority>\n`;
-        if (script.parameter4) xml += `      <parameter4>${escapeXml(script.parameter4)}</parameter4>\n`;
-        if (script.parameter5) xml += `      <parameter5>${escapeXml(script.parameter5)}</parameter5>\n`;
-        if (script.parameter6) xml += `      <parameter6>${escapeXml(script.parameter6)}</parameter6>\n`;
-        if (script.parameter7) xml += `      <parameter7>${escapeXml(script.parameter7)}</parameter7>\n`;
-        if (script.parameter8) xml += `      <parameter8>${escapeXml(script.parameter8)}</parameter8>\n`;
-        if (script.parameter9) xml += `      <parameter9>${escapeXml(script.parameter9)}</parameter9>\n`;
-        if (script.parameter10) xml += `      <parameter10>${escapeXml(script.parameter10)}</parameter10>\n`;
-        if (script.parameter11) xml += `      <parameter11>${escapeXml(script.parameter11)}</parameter11>\n`;
+        if (script.priority) xml += `      <priority>${this.escapeXml(script.priority)}</priority>\n`;
+        if (script.parameter4) xml += `      <parameter4>${this.escapeXml(script.parameter4)}</parameter4>\n`;
+        if (script.parameter5) xml += `      <parameter5>${this.escapeXml(script.parameter5)}</parameter5>\n`;
+        if (script.parameter6) xml += `      <parameter6>${this.escapeXml(script.parameter6)}</parameter6>\n`;
+        if (script.parameter7) xml += `      <parameter7>${this.escapeXml(script.parameter7)}</parameter7>\n`;
+        if (script.parameter8) xml += `      <parameter8>${this.escapeXml(script.parameter8)}</parameter8>\n`;
+        if (script.parameter9) xml += `      <parameter9>${this.escapeXml(script.parameter9)}</parameter9>\n`;
+        if (script.parameter10) xml += `      <parameter10>${this.escapeXml(script.parameter10)}</parameter10>\n`;
+        if (script.parameter11) xml += `      <parameter11>${this.escapeXml(script.parameter11)}</parameter11>\n`;
         xml += '    </script>\n';
       });
       xml += '  </scripts>\n';
@@ -1056,7 +1087,7 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/api/v1/scripts/${scriptId}`);
       return response.data;
     } catch (error) {
-      logger.info(`Jamf Pro API failed with status ${getAxiosErrorStatus(error)}, trying Classic API...`);
+      logger.debug(`Jamf Pro API failed with status ${getAxiosErrorStatus(error)}, trying Classic API...`);
       // Fall back to Classic API for any error
     }
     
@@ -1089,7 +1120,10 @@ export class JamfApiClientHybrid {
         scriptContents: script.script_contents,
       };
     } catch (error) {
-      logger.info(`Failed to get script details for ${scriptId}:`, error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getScriptDetails', scriptId });
+      }
+      logger.error(`Failed to get script details for ${scriptId}:`, { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -1114,7 +1148,7 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(endpoint);
       return response.data.results || [];
     } catch (error) {
-      logger.info(`Jamf Pro API failed, trying Classic API...`);
+      logger.debug(`Jamf Pro API failed, trying Classic API...`);
       
       // Fall back to Classic API
       try {
@@ -1135,7 +1169,10 @@ export class JamfApiClientHybrid {
         logger.info(`Found ${profiles ? profiles.length : 0} ${type} configuration profiles from Classic API`);
         return profiles || [];
       } catch (classicError) {
-        logger.info('Classic API also failed:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'listConfigurationProfiles', type });
+        }
+        logger.error('Classic API also failed:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -1157,7 +1194,7 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(endpoint);
       return response.data;
     } catch (error) {
-      logger.info(`Jamf Pro API failed, trying Classic API...`);
+      logger.debug(`Jamf Pro API failed, trying Classic API...`);
       
       // Fall back to Classic API
       try {
@@ -1181,7 +1218,10 @@ export class JamfApiClientHybrid {
           
         return profile;
       } catch (classicError) {
-        logger.info('Classic API also failed:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'getConfigurationProfileDetails', profileId, type });
+        }
+        logger.error('Classic API also failed:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -1241,7 +1281,7 @@ export class JamfApiClientHybrid {
       await this.axiosInstance.put(endpoint, updatePayload);
       logger.info(`Successfully deployed profile ${profileId} to ${deviceIds.length} ${type}(s)`);
     } catch (error) {
-      logger.info(`Jamf Pro API failed, trying Classic API...`);
+      logger.debug(`Jamf Pro API failed, trying Classic API...`);
       
       // Fall back to Classic API
       try {
@@ -1267,7 +1307,10 @@ export class JamfApiClientHybrid {
         await this.axiosInstance.put(endpoint, updatePayload);
         logger.info(`Successfully deployed profile ${profileId} to ${deviceIds.length} ${type}(s) via Classic API`);
       } catch (classicError) {
-        logger.info('Classic API also failed:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'deployConfigurationProfile', profileId, type });
+        }
+        logger.error('Classic API also failed:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -1313,7 +1356,7 @@ export class JamfApiClientHybrid {
       await this.axiosInstance.put(endpoint, updatePayload);
       logger.info(`Successfully removed profile ${profileId} from ${deviceIds.length} ${type}(s)`);
     } catch (error) {
-      logger.info(`Jamf Pro API failed, trying Classic API...`);
+      logger.debug(`Jamf Pro API failed, trying Classic API...`);
       
       // Fall back to Classic API
       try {
@@ -1341,9 +1384,38 @@ export class JamfApiClientHybrid {
         await this.axiosInstance.put(endpoint, updatePayload);
         logger.info(`Successfully removed profile ${profileId} from ${deviceIds.length} ${type}(s) via Classic API`);
       } catch (classicError) {
-        logger.info('Classic API also failed:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'removeConfigurationProfile', profileId, type });
+        }
+        logger.error('Classic API also failed:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
+    }
+  }
+
+  /**
+   * Delete a configuration profile
+   */
+  async deleteConfigurationProfile(profileId: string, type: 'computer' | 'mobiledevice' = 'computer'): Promise<void> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot delete configuration profiles in read-only mode');
+    }
+
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Deleting ${type} configuration profile ${profileId} using Classic API...`);
+      const endpoint = type === 'computer'
+        ? `/JSSResource/osxconfigurationprofiles/id/${profileId}`
+        : `/JSSResource/mobiledeviceconfigurationprofiles/id/${profileId}`;
+      await this.axiosInstance.delete(endpoint);
+      logger.info(`Successfully deleted ${type} configuration profile ${profileId}`);
+    } catch (error) {
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'deleteConfigurationProfile', profileId, type });
+      }
+      logger.error('Failed to delete configuration profile:', { error: getErrorMessage(error) });
+      throw error;
     }
   }
 
@@ -1361,7 +1433,10 @@ export class JamfApiClientHybrid {
       const packages = response.data.packages || [];
       return packages.slice(0, limit);
     } catch (error) {
-      logger.info('Failed to list packages:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listPackages' });
+      }
+      logger.error('Failed to list packages:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -1378,7 +1453,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/JSSResource/packages/id/${packageId}`);
       return response.data.package;
     } catch (error) {
-      logger.info('Failed to get package details:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getPackageDetails', packageId });
+      }
+      logger.error('Failed to get package details:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -1408,7 +1486,10 @@ export class JamfApiClientHybrid {
       
       return filtered.slice(0, limit);
     } catch (error) {
-      logger.info('Failed to search packages:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'searchPackages' });
+      }
+      logger.error('Failed to search packages:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -1438,7 +1519,10 @@ export class JamfApiClientHybrid {
         },
       };
     } catch (error) {
-      logger.info('Failed to get package deployment history:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getPackageDeploymentHistory', packageId });
+      }
+      logger.error('Failed to get package deployment history:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -1484,7 +1568,10 @@ export class JamfApiClientHybrid {
 
       return policiesUsingPackage;
     } catch (error) {
-      logger.info('Failed to get policies using package:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getPoliciesUsingPackage', packageId });
+      }
+      logger.error('Failed to get policies using package:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -1517,7 +1604,7 @@ export class JamfApiClientHybrid {
               });
             }
           } catch (err) {
-            logger.info(`Failed to get details for group ${group.id}:`, err);
+            logger.debug(`Failed to get details for group ${group.id}:`, err);
           }
         }
         groups = detailedGroups;
@@ -1525,7 +1612,10 @@ export class JamfApiClientHybrid {
       
       return groups;
     } catch (error) {
-      logger.info('Failed to list computer groups:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listComputerGroups', type });
+      }
+      logger.error('Failed to list computer groups:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -1553,7 +1643,10 @@ export class JamfApiClientHybrid {
         memberCount: group.computers?.length || 0,
       };
     } catch (error) {
-      logger.info('Failed to get computer group details:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getComputerGroupDetails', groupId });
+      }
+      logger.error('Failed to get computer group details:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -1608,7 +1701,7 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.post('/api/v1/computer-groups', payload);
       return response.data;
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
       
       // Fall back to Classic API
       try {
@@ -1623,7 +1716,10 @@ export class JamfApiClientHybrid {
         const response = await this.axiosInstance.post('/JSSResource/computergroups/id/0', payload);
         return response.data.computer_group;
       } catch (classicError) {
-        logger.info('Classic API also failed:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'createStaticComputerGroup', name });
+        }
+        logger.error('Classic API also failed:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -1685,7 +1781,10 @@ export class JamfApiClientHybrid {
         return { id: groupId, success: true };
       }
     } catch (error) {
-      logger.info('Failed to update computer group:', getAxiosErrorStatus(error), getAxiosErrorData(error));
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'updateStaticComputerGroup', groupId });
+      }
+      logger.error('Failed to update computer group:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -1706,14 +1805,17 @@ export class JamfApiClientHybrid {
       await this.axiosInstance.delete(`/api/v1/computer-groups/${groupId}`);
       logger.info(`Successfully deleted computer group ${groupId}`);
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
       
       // Fall back to Classic API
       try {
         await this.axiosInstance.delete(`/JSSResource/computergroups/id/${groupId}`);
         logger.info(`Successfully deleted computer group ${groupId} via Classic API`);
       } catch (classicError) {
-        logger.info('Classic API also failed:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'deleteComputerGroup', groupId });
+        }
+        logger.error('Classic API also failed:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -1737,7 +1839,7 @@ export class JamfApiClientHybrid {
       
       return response.data.results || [];
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
     }
     
     // Try Classic API
@@ -1753,7 +1855,10 @@ export class JamfApiClientHybrid {
         return devices.slice(0, limit);
       }
     } catch (error) {
-      logger.info('Classic API search failed:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'searchMobileDevices' });
+      }
+      logger.error('Classic API search failed:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -1770,7 +1875,7 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/api/v2/mobile-devices/${deviceId}/detail`);
       return response.data;
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
     }
     
     // Try Classic API
@@ -1779,7 +1884,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/JSSResource/mobiledevices/id/${deviceId}`);
       return response.data.mobile_device;
     } catch (error) {
-      logger.info('Classic API failed:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getMobileDeviceDetails', deviceId });
+      }
+      logger.error('Classic API failed:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -1807,7 +1915,7 @@ export class JamfApiClientHybrid {
       await this.axiosInstance.post(`/api/v2/mobile-devices/${deviceId}/update-inventory`);
       logger.info(`Mobile device inventory update requested for device ${deviceId}`);
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
       
       // Try Classic API using MDM commands
       try {
@@ -1836,7 +1944,10 @@ export class JamfApiClientHybrid {
         );
         logger.info(`Mobile device inventory update requested for device ${deviceId} via Classic API`);
       } catch (classicError) {
-        logger.info('Classic API also failed:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'updateMobileDeviceInventory', deviceId });
+        }
+        logger.error('Classic API also failed:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -1900,7 +2011,7 @@ export class JamfApiClientHybrid {
       
       logger.info(`Successfully sent MDM command '${command}' to device ${deviceId}`);
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
       
       // Try Classic API
       try {
@@ -1909,55 +2020,62 @@ export class JamfApiClientHybrid {
         });
         logger.info(`Successfully sent MDM command '${command}' to device ${deviceId} via Classic API`);
       } catch (classicError) {
-        logger.info('Classic API also failed:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'sendMDMCommand', deviceId, command });
+        }
+        logger.error('Classic API also failed:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
   }
 
   /**
-   * List all scripts
+   * List all scripts (cached for 60s)
    */
   async listScripts(limit: number = 100): Promise<any[]> {
-    await this.ensureAuthenticated();
-    
-    // Scripts are only available through Classic API
-    try {
-      logger.info('Listing scripts using Classic API...');
-      const response = await this.axiosInstance.get('/JSSResource/scripts');
-      const scripts = response.data.scripts || [];
-      return scripts.slice(0, limit);
-    } catch (error) {
-      logger.info('Failed to list scripts:', error);
-      throw error;
-    }
+    return this.cachedGet(`listScripts:${limit}`, async () => {
+      await this.ensureAuthenticated();
+
+      // Scripts are only available through Classic API
+      try {
+        logger.info('Listing scripts using Classic API...');
+        const response = await this.axiosInstance.get('/JSSResource/scripts');
+        const scripts = response.data.scripts || [];
+        return scripts.slice(0, limit);
+      } catch (error) {
+        if (isAxiosError(error)) {
+          throw JamfAPIError.fromAxiosError(error, { operation: 'listScripts' });
+        }
+        logger.error('Failed to list scripts:', { error: getErrorMessage(error) });
+        throw error;
+      }
+    });
   }
 
   /**
-   * Search scripts by name
+   * Search scripts by name (uses cached listScripts internally)
    */
   async searchScripts(query: string, limit: number = 100): Promise<any[]> {
-    await this.ensureAuthenticated();
-    
-    // Scripts are only available through Classic API
     try {
-      logger.info('Searching scripts using Classic API...');
-      const response = await this.axiosInstance.get('/JSSResource/scripts');
-      const scripts = response.data.scripts || [];
-      
+      // Use cached listScripts to avoid redundant API calls
+      const scripts = await this.listScripts(1000);
+
       if (!query) {
         return scripts.slice(0, limit);
       }
-      
+
       const lowerQuery = query.toLowerCase();
-      const filtered = scripts.filter((s: any) => 
+      const filtered = scripts.filter((s: any) =>
         s.name?.toLowerCase().includes(lowerQuery) ||
         s.id?.toString().includes(query)
       );
-      
+
       return filtered.slice(0, limit);
     } catch (error) {
-      logger.info('Failed to search scripts:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'searchScripts' });
+      }
+      logger.error('Failed to search scripts:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -2020,7 +2138,10 @@ export class JamfApiClientHybrid {
       
       return { success: true };
     } catch (error) {
-      logger.info('Failed to create script:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'createScript' });
+      }
+      logger.error('Failed to create script:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -2074,7 +2195,10 @@ export class JamfApiClientHybrid {
       // Fetch and return the updated script details
       return await this.getScriptDetails(scriptId);
     } catch (error) {
-      logger.info('Failed to update script:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'updateScript', scriptId });
+      }
+      logger.error('Failed to update script:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -2094,7 +2218,10 @@ export class JamfApiClientHybrid {
       await this.axiosInstance.delete(`/JSSResource/scripts/id/${scriptId}`);
       logger.info(`Successfully deleted script ${scriptId}`);
     } catch (error) {
-      logger.info('Failed to delete script:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'deleteScript', scriptId });
+      }
+      logger.error('Failed to delete script:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -2103,45 +2230,36 @@ export class JamfApiClientHybrid {
    * Build XML payload for script creation/update
    */
   private buildScriptXml(scriptData: any): string {
-    const escapeXml = (str: string): string => {
-      return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-    };
-    
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<script>\n';
     
     // Basic script information
-    if (scriptData.name) xml += `  <name>${escapeXml(scriptData.name)}</name>\n`;
-    if (scriptData.category) xml += `  <category>${escapeXml(scriptData.category)}</category>\n`;
-    if (scriptData.filename) xml += `  <filename>${escapeXml(scriptData.filename)}</filename>\n`;
-    if (scriptData.info) xml += `  <info>${escapeXml(scriptData.info)}</info>\n`;
-    if (scriptData.notes) xml += `  <notes>${escapeXml(scriptData.notes)}</notes>\n`;
-    if (scriptData.priority) xml += `  <priority>${escapeXml(scriptData.priority)}</priority>\n`;
-    
+    if (scriptData.name) xml += `  <name>${this.escapeXml(scriptData.name)}</name>\n`;
+    if (scriptData.category) xml += `  <category>${this.escapeXml(scriptData.category)}</category>\n`;
+    if (scriptData.filename) xml += `  <filename>${this.escapeXml(scriptData.filename)}</filename>\n`;
+    if (scriptData.info) xml += `  <info>${this.escapeXml(scriptData.info)}</info>\n`;
+    if (scriptData.notes) xml += `  <notes>${this.escapeXml(scriptData.notes)}</notes>\n`;
+    if (scriptData.priority) xml += `  <priority>${this.escapeXml(scriptData.priority)}</priority>\n`;
+
     // Parameters
     if (scriptData.parameters) {
       xml += '  <parameters>\n';
-      if (scriptData.parameters.parameter4) xml += `    <parameter4>${escapeXml(scriptData.parameters.parameter4)}</parameter4>\n`;
-      if (scriptData.parameters.parameter5) xml += `    <parameter5>${escapeXml(scriptData.parameters.parameter5)}</parameter5>\n`;
-      if (scriptData.parameters.parameter6) xml += `    <parameter6>${escapeXml(scriptData.parameters.parameter6)}</parameter6>\n`;
-      if (scriptData.parameters.parameter7) xml += `    <parameter7>${escapeXml(scriptData.parameters.parameter7)}</parameter7>\n`;
-      if (scriptData.parameters.parameter8) xml += `    <parameter8>${escapeXml(scriptData.parameters.parameter8)}</parameter8>\n`;
-      if (scriptData.parameters.parameter9) xml += `    <parameter9>${escapeXml(scriptData.parameters.parameter9)}</parameter9>\n`;
-      if (scriptData.parameters.parameter10) xml += `    <parameter10>${escapeXml(scriptData.parameters.parameter10)}</parameter10>\n`;
-      if (scriptData.parameters.parameter11) xml += `    <parameter11>${escapeXml(scriptData.parameters.parameter11)}</parameter11>\n`;
+      if (scriptData.parameters.parameter4) xml += `    <parameter4>${this.escapeXml(scriptData.parameters.parameter4)}</parameter4>\n`;
+      if (scriptData.parameters.parameter5) xml += `    <parameter5>${this.escapeXml(scriptData.parameters.parameter5)}</parameter5>\n`;
+      if (scriptData.parameters.parameter6) xml += `    <parameter6>${this.escapeXml(scriptData.parameters.parameter6)}</parameter6>\n`;
+      if (scriptData.parameters.parameter7) xml += `    <parameter7>${this.escapeXml(scriptData.parameters.parameter7)}</parameter7>\n`;
+      if (scriptData.parameters.parameter8) xml += `    <parameter8>${this.escapeXml(scriptData.parameters.parameter8)}</parameter8>\n`;
+      if (scriptData.parameters.parameter9) xml += `    <parameter9>${this.escapeXml(scriptData.parameters.parameter9)}</parameter9>\n`;
+      if (scriptData.parameters.parameter10) xml += `    <parameter10>${this.escapeXml(scriptData.parameters.parameter10)}</parameter10>\n`;
+      if (scriptData.parameters.parameter11) xml += `    <parameter11>${this.escapeXml(scriptData.parameters.parameter11)}</parameter11>\n`;
       xml += '  </parameters>\n';
     }
-    
+
     // OS Requirements
-    if (scriptData.os_requirements) xml += `  <os_requirements>${escapeXml(scriptData.os_requirements)}</os_requirements>\n`;
-    
+    if (scriptData.os_requirements) xml += `  <os_requirements>${this.escapeXml(scriptData.os_requirements)}</os_requirements>\n`;
+
     // Script contents
     if (scriptData.script_contents) {
-      xml += `  <script_contents>${escapeXml(scriptData.script_contents)}</script_contents>\n`;
+      xml += `  <script_contents>${this.escapeXml(scriptData.script_contents)}</script_contents>\n`;
     }
     
     // Script contents encoded flag
@@ -2178,7 +2296,7 @@ export class JamfApiClientHybrid {
       
       return groups;
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
       
       // Fall back to Classic API
       try {
@@ -2196,7 +2314,7 @@ export class JamfApiClientHybrid {
                 detailedGroups.push(group);
               }
             } catch (err) {
-              logger.info(`Failed to get details for mobile device group ${group.id}:`, err);
+              logger.debug(`Failed to get details for mobile device group ${group.id}:`, err);
             }
           }
           groups = detailedGroups;
@@ -2204,7 +2322,10 @@ export class JamfApiClientHybrid {
         
         return groups;
       } catch (classicError) {
-        logger.info('Classic API also failed:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'getMobileDeviceGroups', type });
+        }
+        logger.error('Classic API also failed:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -2222,7 +2343,7 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/api/v1/mobile-device-groups/${groupId}`);
       return response.data;
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
       
       // Fall back to Classic API
       try {
@@ -2240,7 +2361,10 @@ export class JamfApiClientHybrid {
           memberCount: group.mobile_devices?.length || 0,
         };
       } catch (classicError) {
-        logger.info('Classic API also failed:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'getMobileDeviceGroupDetails', groupId });
+        }
+        logger.error('Classic API also failed:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -2337,7 +2461,10 @@ export class JamfApiClientHybrid {
         generatedAt: new Date().toISOString(),
       };
     } catch (error) {
-      logger.info('Failed to generate inventory summary:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getInventorySummary' });
+      }
+      logger.error('Failed to generate inventory summary:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -2367,7 +2494,7 @@ export class JamfApiClientHybrid {
           const groupDetails = await this.getComputerGroupDetails(group.id.toString());
           totalInScope += groupDetails.computers?.length || 0;
         } catch (err) {
-          logger.info(`Failed to get group details for ${group.id}:`, err);
+          logger.debug(`Failed to get group details for ${group.id}:`, err);
         }
       }
       
@@ -2447,7 +2574,10 @@ export class JamfApiClientHybrid {
         generatedAt: new Date().toISOString(),
       };
     } catch (error) {
-      logger.info('Failed to generate policy compliance report:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getPolicyComplianceReport', policyId });
+      }
+      logger.error('Failed to generate policy compliance report:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -2519,7 +2649,10 @@ export class JamfApiClientHybrid {
         generatedAt: new Date().toISOString(),
       };
     } catch (error) {
-      logger.info('Failed to generate package deployment statistics:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getPackageDeploymentStats', packageId });
+      }
+      logger.error('Failed to generate package deployment statistics:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -2585,7 +2718,7 @@ export class JamfApiClientHybrid {
             }
           }
         } catch (err) {
-          logger.info(`Failed to get details for computer ${computer.id}:`, err);
+          logger.debug(`Failed to get details for computer ${computer.id}:`, err);
         }
       }
       
@@ -2640,7 +2773,10 @@ export class JamfApiClientHybrid {
         generatedAt: new Date().toISOString(),
       };
     } catch (error) {
-      logger.info('Failed to generate software version report:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getSoftwareVersionReport', softwareName });
+      }
+      logger.error('Failed to generate software version report:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -2658,14 +2794,10 @@ export class JamfApiClientHybrid {
       // Try to use advanced search first (has last check-in times)
       try {
         logger.info('Attempting to use advanced search for compliance data...');
-        
-        // Use search ID 63 as requested
-        const searchId = 63; 
-        logger.info(`Using search ID: ${searchId} as requested...`);
-        
-        // First, let's check what fields this search has
-        const searchDetails = await this.getAdvancedComputerSearchDetails(String(searchId));
-        logger.info('Search display fields:', searchDetails.display_fields);
+
+        // Dynamically find or create a compliance search
+        const searchId = await this.ensureComplianceSearch();
+        logger.info(`Using compliance search ID: ${searchId}`);
         
         // Use this search to get computers - it should return ALL computers with check-in data
         const response = await this.axiosInstance.get(`/JSSResource/advancedcomputersearches/id/${searchId}`);
@@ -2698,15 +2830,6 @@ export class JamfApiClientHybrid {
                            searchData['Last Contact Time'] ||
                            computer.lastContactTime;
           
-          // Debug target computer for troubleshooting
-          if (computer.id === '759' || computer.name === 'CORP-IT-0322') {
-            logger.info(`Found debug target computer (${computer.name}):`, {
-              id: computer.id,
-              searchData: searchData,
-              checkInTime: checkInTime
-            });
-          }
-          
           return {
             ...computer,
             lastContactTime: checkInTime || 'Unknown',
@@ -2715,8 +2838,8 @@ export class JamfApiClientHybrid {
         
         logger.info(`Found ${computers.length} computers with ${checkInMap.size} having check-in data`);
       } catch (advSearchError: any) {
-        logger.info('Advanced search failed:', advSearchError.message);
-        logger.info('Falling back to basic search with individual lookups...');
+        logger.debug('Advanced search failed, falling back to basic search', { error: advSearchError.message });
+        logger.debug('Falling back to basic search with individual lookups...');
         
         // Fall back to basic search
         const basicComputers = await this.searchComputers('', 100); // Limit to 100 to avoid timeout
@@ -2735,7 +2858,7 @@ export class JamfApiClientHybrid {
                                 'Unknown'
               };
             } catch (err) {
-              logger.info(`Failed to get details for computer ${computer.id}:`, err);
+              logger.debug(`Failed to get details for computer ${computer.id}:`, err);
               return computer;
             }
           })
@@ -2803,7 +2926,7 @@ export class JamfApiClientHybrid {
               });
             }
           } catch (err) {
-            logger.info(`Failed to get policy details for ${policy.id}:`, err);
+            logger.debug(`Failed to get policy details for ${policy.id}:`, err);
           }
         }
       }
@@ -2870,7 +2993,10 @@ export class JamfApiClientHybrid {
         generatedAt: new Date().toISOString(),
       };
     } catch (error) {
-      logger.info('Failed to generate device compliance summary:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getDeviceComplianceSummary' });
+      }
+      logger.error('Failed to generate device compliance summary:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -2918,7 +3044,10 @@ export class JamfApiClientHybrid {
 
       return { total, compliant, nonCompliant, notReporting, issues };
     } catch (error) {
-      logger.info('Failed to generate compliance report:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getComplianceReport' });
+      }
+      logger.error('Failed to generate compliance report:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -2989,7 +3118,10 @@ export class JamfApiClientHybrid {
           .slice(0, 20),
       };
     } catch (error) {
-      logger.info('Failed to generate storage report:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getStorageReport' });
+      }
+      logger.error('Failed to generate storage report:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3048,7 +3180,10 @@ export class JamfApiClientHybrid {
           })),
       };
     } catch (error) {
-      logger.info('Failed to generate OS version report:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getOSVersionReport' });
+      }
+      logger.error('Failed to generate OS version report:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3171,7 +3306,10 @@ export class JamfApiClientHybrid {
         };
       }
     } catch (error) {
-      logger.info('Failed to create advanced computer search:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'createAdvancedComputerSearch' });
+      }
+      logger.error('Failed to create advanced computer search:', { error: getErrorMessage(error) });
       throw new Error(`Failed to create advanced computer search: ${getErrorMessage(error)}`);
     }
   }
@@ -3194,7 +3332,10 @@ export class JamfApiClientHybrid {
 
       return response.data.advanced_computer_search || response.data;
     } catch (error) {
-      logger.info(`Failed to get advanced computer search ${searchId}:`, error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getAdvancedComputerSearchDetails', searchId });
+      }
+      logger.error(`Failed to get advanced computer search ${searchId}:`, { error: getErrorMessage(error) });
       throw new Error(`Failed to get advanced computer search details: ${getErrorMessage(error)}`);
     }
   }
@@ -3213,7 +3354,10 @@ export class JamfApiClientHybrid {
       await this.axiosInstance.delete(`/JSSResource/advancedcomputersearches/id/${searchId}`);
       logger.info(`Successfully deleted advanced computer search ${searchId}`);
     } catch (error) {
-      logger.info(`Failed to delete advanced computer search ${searchId}:`, error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'deleteAdvancedComputerSearch', searchId });
+      }
+      logger.error(`Failed to delete advanced computer search ${searchId}:`, { error: getErrorMessage(error) });
       throw new Error(`Failed to delete advanced computer search: ${getErrorMessage(error)}`);
     }
   }
@@ -3236,7 +3380,10 @@ export class JamfApiClientHybrid {
 
       return response.data.advanced_computer_searches || [];
     } catch (error) {
-      logger.info('Failed to list advanced computer searches:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listAdvancedComputerSearches' });
+      }
+      logger.error('Failed to list advanced computer searches:', { error: getErrorMessage(error) });
       throw new Error(`Failed to list advanced computer searches: ${getErrorMessage(error)}`);
     }
   }
@@ -3312,7 +3459,10 @@ export class JamfApiClientHybrid {
       logger.info(`Successfully created compliance search with ID: ${searchId}`);
       return searchId.toString();
     } catch (error) {
-      logger.info('Failed to ensure compliance search exists:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'ensureComplianceSearch' });
+      }
+      logger.error('Failed to ensure compliance search exists:', { error: getErrorMessage(error) });
       throw new Error(`Failed to ensure compliance search: ${getErrorMessage(error)}`);
     }
   }
@@ -3335,7 +3485,10 @@ export class JamfApiClientHybrid {
       );
       return response.data.computer_history || response.data;
     } catch (error) {
-      logger.info('Failed to get computer history:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getComputerHistory', deviceId });
+      }
+      logger.error('Failed to get computer history:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3353,7 +3506,10 @@ export class JamfApiClientHybrid {
       );
       return response.data.computer_history?.policy_logs || response.data;
     } catch (error) {
-      logger.info('Failed to get computer policy logs:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getComputerPolicyLogs', deviceId });
+      }
+      logger.error('Failed to get computer policy logs:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3371,7 +3527,10 @@ export class JamfApiClientHybrid {
       );
       return response.data.computer_history?.commands || response.data;
     } catch (error) {
-      logger.info('Failed to get computer MDM command history:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getComputerMDMCommandHistory', deviceId });
+      }
+      logger.error('Failed to get computer MDM command history:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3422,7 +3581,7 @@ export class JamfApiClientHybrid {
       logger.info(`Successfully sent MDM command '${command}' to computer ${deviceId}`);
       return response.data;
     } catch (error) {
-      logger.info('Jamf Pro API failed for computer MDM command, trying Classic API...');
+      logger.debug('Jamf Pro API failed for computer MDM command, trying Classic API...');
 
       try {
         const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_command><general><command>${this.escapeXml(command)}</command></general><computers><computer><id>${this.escapeXml(deviceId)}</id></computer></computers></computer_command>`;
@@ -3439,7 +3598,10 @@ export class JamfApiClientHybrid {
         logger.info(`Successfully sent MDM command '${command}' to computer ${deviceId} via Classic API`);
         return response.data;
       } catch (classicError) {
-        logger.info('Classic API also failed for computer MDM command:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'sendComputerMDMCommand', deviceId, command });
+        }
+        logger.error('Classic API also failed for computer MDM command:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -3471,7 +3633,10 @@ export class JamfApiClientHybrid {
       );
       logger.info(`Successfully flushed ${commandStatus} MDM commands for computer ${deviceId}`);
     } catch (error) {
-      logger.info('Failed to flush MDM commands:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'flushMDMCommands', deviceId });
+      }
+      logger.error('Failed to flush MDM commands:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3491,13 +3656,16 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/api/v1/buildings');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get('/JSSResource/buildings');
         return response.data.buildings || [];
       } catch (classicError) {
-        logger.info('Classic API also failed for buildings:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'listBuildings' });
+        }
+        logger.error('Classic API also failed for buildings:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -3514,13 +3682,16 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/api/v1/buildings/${buildingId}`);
       return response.data;
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get(`/JSSResource/buildings/id/${buildingId}`);
         return response.data.building;
       } catch (classicError) {
-        logger.info('Classic API also failed for building details:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'getBuildingDetails', buildingId });
+        }
+        logger.error('Classic API also failed for building details:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -3541,13 +3712,16 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/api/v1/departments');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get('/JSSResource/departments');
         return response.data.departments || [];
       } catch (classicError) {
-        logger.info('Classic API also failed for departments:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'listDepartments' });
+        }
+        logger.error('Classic API also failed for departments:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -3564,13 +3738,16 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/api/v1/departments/${departmentId}`);
       return response.data;
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get(`/JSSResource/departments/id/${departmentId}`);
         return response.data.department;
       } catch (classicError) {
-        logger.info('Classic API also failed for department details:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'getDepartmentDetails', departmentId });
+        }
+        logger.error('Classic API also failed for department details:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -3591,13 +3768,16 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/api/v1/categories');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get('/JSSResource/categories');
         return response.data.categories || [];
       } catch (classicError) {
-        logger.info('Classic API also failed for categories:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'listCategories' });
+        }
+        logger.error('Classic API also failed for categories:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -3614,13 +3794,16 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/api/v1/categories/${categoryId}`);
       return response.data;
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get(`/JSSResource/categories/id/${categoryId}`);
         return response.data.category;
       } catch (classicError) {
-        logger.info('Classic API also failed for category details:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'getCategoryDetails', categoryId });
+        }
+        logger.error('Classic API also failed for category details:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -3647,7 +3830,10 @@ export class JamfApiClientHybrid {
       );
       return response.data;
     } catch (error) {
-      logger.info('Failed to get LAPS password:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getLocalAdminPassword', clientManagementId });
+      }
+      logger.error('Failed to get LAPS password:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3665,7 +3851,10 @@ export class JamfApiClientHybrid {
       );
       return response.data;
     } catch (error) {
-      logger.info('Failed to get LAPS audit:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getLocalAdminPasswordAudit', clientManagementId });
+      }
+      logger.error('Failed to get LAPS audit:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3683,7 +3872,10 @@ export class JamfApiClientHybrid {
       );
       return response.data;
     } catch (error) {
-      logger.info('Failed to get LAPS accounts:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getLocalAdminPasswordAccounts', clientManagementId });
+      }
+      logger.error('Failed to get LAPS accounts:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3703,7 +3895,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/api/v2/patch-software-title-configurations');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Failed to list patch software titles:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listPatchSoftwareTitles' });
+      }
+      logger.error('Failed to list patch software titles:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3719,7 +3914,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/api/v2/patch-software-title-configurations/${titleId}`);
       return response.data;
     } catch (error) {
-      logger.info('Failed to get patch software title details:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getPatchSoftwareTitleDetails', titleId });
+      }
+      logger.error('Failed to get patch software title details:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3739,7 +3937,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/api/v2/patch-policies', { params });
       return response.data.results || [];
     } catch (error) {
-      logger.info('Failed to list patch policies:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listPatchPolicies' });
+      }
+      logger.error('Failed to list patch policies:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3755,7 +3956,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/api/v2/patch-policies/${policyId}/dashboard`);
       return response.data;
     } catch (error) {
-      logger.info('Failed to get patch policy dashboard:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getPatchPolicyDashboard', policyId });
+      }
+      logger.error('Failed to get patch policy dashboard:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3775,13 +3979,16 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/api/v1/computer-extension-attributes');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get('/JSSResource/computerextensionattributes');
         return response.data.computer_extension_attributes || [];
       } catch (classicError) {
-        logger.info('Classic API also failed for extension attributes:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'listComputerExtensionAttributes' });
+        }
+        logger.error('Classic API also failed for extension attributes:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -3798,13 +4005,16 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/api/v1/computer-extension-attributes/${attributeId}`);
       return response.data;
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get(`/JSSResource/computerextensionattributes/id/${attributeId}`);
         return response.data.computer_extension_attribute;
       } catch (classicError) {
-        logger.info('Classic API also failed for extension attribute details:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'getComputerExtensionAttributeDetails', attributeId });
+        }
+        logger.error('Classic API also failed for extension attribute details:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -3825,7 +4035,7 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.post('/api/v1/computer-extension-attributes', data);
       return response.data;
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
         const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_extension_attribute><name>${this.escapeXml(data.name)}</name><description>${this.escapeXml(data.description || '')}</description><data_type>${this.escapeXml(data.dataType || 'String')}</data_type><input_type><type>${this.escapeXml(data.inputType || 'script')}</type>${data.scriptContents ? `<script>${this.escapeXml(data.scriptContents)}</script>` : ''}</input_type><inventory_display>${this.escapeXml(data.inventoryDisplay || 'Extension Attributes')}</inventory_display></computer_extension_attribute>`;
@@ -3841,7 +4051,10 @@ export class JamfApiClientHybrid {
         );
         return response.data;
       } catch (classicError) {
-        logger.info('Classic API also failed for creating extension attribute:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'createComputerExtensionAttribute' });
+        }
+        logger.error('Classic API also failed for creating extension attribute:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -3862,7 +4075,7 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.put(`/api/v1/computer-extension-attributes/${attributeId}`, data);
       return response.data;
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
         const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><computer_extension_attribute>${data.name ? `<name>${this.escapeXml(data.name)}</name>` : ''}${data.description !== undefined ? `<description>${this.escapeXml(data.description)}</description>` : ''}${data.dataType ? `<data_type>${this.escapeXml(data.dataType)}</data_type>` : ''}${data.scriptContents ? `<input_type><type>script</type><script>${this.escapeXml(data.scriptContents)}</script></input_type>` : ''}</computer_extension_attribute>`;
@@ -3878,7 +4091,40 @@ export class JamfApiClientHybrid {
         );
         return response.data;
       } catch (classicError) {
-        logger.info('Classic API also failed for updating extension attribute:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'updateComputerExtensionAttribute', attributeId });
+        }
+        logger.error('Classic API also failed for updating extension attribute:', { error: getErrorMessage(classicError) });
+        throw classicError;
+      }
+    }
+  }
+
+  /**
+   * Delete a computer extension attribute
+   */
+  async deleteComputerExtensionAttribute(attributeId: string): Promise<void> {
+    if (this.readOnlyMode) {
+      throw new Error('Cannot delete Extension Attributes in read-only mode');
+    }
+
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Deleting extension attribute ${attributeId} using Jamf Pro API...`);
+      await this.axiosInstance.delete(`/api/v1/computer-extension-attributes/${attributeId}`);
+      logger.info(`Successfully deleted extension attribute ${attributeId}`);
+    } catch (error) {
+      logger.debug('Jamf Pro API failed, trying Classic API...');
+
+      try {
+        await this.axiosInstance.delete(`/JSSResource/computerextensionattributes/id/${attributeId}`);
+        logger.info(`Successfully deleted extension attribute ${attributeId} via Classic API`);
+      } catch (classicError) {
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'deleteComputerExtensionAttribute', attributeId });
+        }
+        logger.error('Classic API also failed for deleting extension attribute:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -3899,7 +4145,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/api/v1/managed-software-updates/plans');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Failed to list software update plans:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listSoftwareUpdatePlans' });
+      }
+      logger.error('Failed to list software update plans:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3929,7 +4178,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.post('/api/v1/managed-software-updates/plans', payload);
       return response.data;
     } catch (error) {
-      logger.info('Failed to create software update plan:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'createSoftwareUpdatePlan' });
+      }
+      logger.error('Failed to create software update plan:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3945,7 +4197,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/api/v1/managed-software-updates/plans/${planId}`);
       return response.data;
     } catch (error) {
-      logger.info('Failed to get software update plan details:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getSoftwareUpdatePlanDetails', planId });
+      }
+      logger.error('Failed to get software update plan details:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3971,7 +4226,10 @@ export class JamfApiClientHybrid {
         return response.data.results || [];
       }
     } catch (error) {
-      logger.info('Failed to list computer prestages:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listComputerPrestages' });
+      }
+      logger.error('Failed to list computer prestages:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -3992,7 +4250,10 @@ export class JamfApiClientHybrid {
         return response.data;
       }
     } catch (error) {
-      logger.info('Failed to get computer prestage details:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getComputerPrestageDetails', prestageId });
+      }
+      logger.error('Failed to get computer prestage details:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4013,7 +4274,10 @@ export class JamfApiClientHybrid {
         return response.data;
       }
     } catch (error) {
-      logger.info('Failed to get computer prestage scope:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getComputerPrestageScope', prestageId });
+      }
+      logger.error('Failed to get computer prestage scope:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4033,13 +4297,16 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/api/v1/network-segments');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get('/JSSResource/networksegments');
         return response.data.network_segments || [];
       } catch (classicError) {
-        logger.info('Classic API also failed for network segments:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'listNetworkSegments' });
+        }
+        logger.error('Classic API also failed for network segments:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -4056,13 +4323,16 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/api/v1/network-segments/${segmentId}`);
       return response.data;
     } catch (error) {
-      logger.info('Jamf Pro API failed, trying Classic API...');
+      logger.debug('Jamf Pro API failed, trying Classic API...');
 
       try {
         const response = await this.axiosInstance.get(`/JSSResource/networksegments/id/${segmentId}`);
         return response.data.network_segment;
       } catch (classicError) {
-        logger.info('Classic API also failed for network segment details:', classicError);
+        if (isAxiosError(classicError)) {
+          throw JamfAPIError.fromAxiosError(classicError, { operation: 'getNetworkSegmentDetails', segmentId });
+        }
+        logger.error('Classic API also failed for network segment details:', { error: getErrorMessage(classicError) });
         throw classicError;
       }
     }
@@ -4083,7 +4353,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/api/v2/mobile-device-prestages');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Failed to list mobile device prestages:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listMobilePrestages' });
+      }
+      logger.error('Failed to list mobile device prestages:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4099,7 +4372,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/api/v2/mobile-device-prestages/${prestageId}`);
       return response.data;
     } catch (error) {
-      logger.info('Failed to get mobile device prestage details:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getMobilePrestageDetails', prestageId });
+      }
+      logger.error('Failed to get mobile device prestage details:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4119,7 +4395,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/JSSResource/accounts');
       return response.data.accounts;
     } catch (error) {
-      logger.info('Failed to list accounts:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listAccounts' });
+      }
+      logger.error('Failed to list accounts:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4135,7 +4414,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/JSSResource/accounts/userid/${accountId}`);
       return response.data.account;
     } catch (error) {
-      logger.info('Failed to get account details:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getAccountDetails', accountId });
+      }
+      logger.error('Failed to get account details:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4151,7 +4433,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/JSSResource/accounts/groupid/${groupId}`);
       return response.data.group;
     } catch (error) {
-      logger.info('Failed to get account group details:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getAccountGroupDetails', groupId });
+      }
+      logger.error('Failed to get account group details:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4171,7 +4456,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/JSSResource/users');
       return response.data.users || [];
     } catch (error) {
-      logger.info('Failed to list users:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listUsers' });
+      }
+      logger.error('Failed to list users:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4187,7 +4475,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/JSSResource/users/id/${userId}`);
       return response.data.user;
     } catch (error) {
-      logger.info('Failed to get user details:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getUserDetails', userId });
+      }
+      logger.error('Failed to get user details:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4211,7 +4502,10 @@ export class JamfApiClientHybrid {
         return name.includes(lowerQuery) || fullName.includes(lowerQuery) || email.includes(lowerQuery);
       });
     } catch (error) {
-      logger.info('Failed to search users:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'searchUsers' });
+      }
+      logger.error('Failed to search users:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4231,7 +4525,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/api/v1/app-installers/titles');
       return response.data.results || [];
     } catch (error) {
-      logger.info('Failed to list app installers:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listAppInstallers' });
+      }
+      logger.error('Failed to list app installers:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4247,7 +4544,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/api/v1/app-installers/titles/${titleId}`);
       return response.data;
     } catch (error) {
-      logger.info('Failed to get app installer details:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getAppInstallerDetails', titleId });
+      }
+      logger.error('Failed to get app installer details:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4267,7 +4567,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/JSSResource/restrictedsoftware');
       return response.data.restricted_software || [];
     } catch (error) {
-      logger.info('Failed to list restricted software:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listRestrictedSoftware' });
+      }
+      logger.error('Failed to list restricted software:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4283,7 +4586,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/JSSResource/restrictedsoftware/id/${softwareId}`);
       return response.data.restricted_software;
     } catch (error) {
-      logger.info('Failed to get restricted software details:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getRestrictedSoftwareDetails', softwareId });
+      }
+      logger.error('Failed to get restricted software details:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4331,25 +4637,19 @@ export class JamfApiClientHybrid {
 
       return { success: true };
     } catch (error) {
-      logger.info('Failed to create restricted software:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'createRestrictedSoftware' });
+      }
+      logger.error('Failed to create restricted software:', { error: getErrorMessage(error) });
       throw error;
     }
   }
 
   private buildRestrictedSoftwareXml(data: any): string {
-    const escapeXml = (str: string): string => {
-      return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-    };
-
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<restricted_software>\n';
 
-    xml += `  <display_name>${escapeXml(data.displayName)}</display_name>\n`;
-    xml += `  <process_name>${escapeXml(data.processName)}</process_name>\n`;
+    xml += `  <display_name>${this.escapeXml(data.displayName)}</display_name>\n`;
+    xml += `  <process_name>${this.escapeXml(data.processName)}</process_name>\n`;
     xml += `  <match_exact_process_name>${data.matchExactProcessName !== false}</match_exact_process_name>\n`;
     xml += `  <kill_process>${data.killProcess === true}</kill_process>\n`;
     xml += `  <delete_executable>${data.deleteExecutable === true}</delete_executable>\n`;
@@ -4399,7 +4699,10 @@ export class JamfApiClientHybrid {
 
       return await this.getRestrictedSoftwareDetails(softwareId);
     } catch (error) {
-      logger.info('Failed to update restricted software:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'updateRestrictedSoftware', softwareId });
+      }
+      logger.error('Failed to update restricted software:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4419,7 +4722,10 @@ export class JamfApiClientHybrid {
       await this.axiosInstance.delete(`/JSSResource/restrictedsoftware/id/${softwareId}`);
       logger.info(`Successfully deleted restricted software ${softwareId}`);
     } catch (error) {
-      logger.info('Failed to delete restricted software:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'deleteRestrictedSoftware', softwareId });
+      }
+      logger.error('Failed to delete restricted software:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4439,7 +4745,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get('/JSSResource/webhooks');
       return response.data.webhooks || [];
     } catch (error) {
-      logger.info('Failed to list webhooks:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listWebhooks' });
+      }
+      logger.error('Failed to list webhooks:', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -4455,7 +4764,10 @@ export class JamfApiClientHybrid {
       const response = await this.axiosInstance.get(`/JSSResource/webhooks/id/${webhookId}`);
       return response.data.webhook;
     } catch (error) {
-      logger.info('Failed to get webhook details:', error);
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getWebhookDetails', webhookId });
+      }
+      logger.error('Failed to get webhook details:', { error: getErrorMessage(error) });
       throw error;
     }
   }
