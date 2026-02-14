@@ -91,6 +91,7 @@ export function registerSkillsAsMCPTools(
   (skillsManager as any).context = skillContext;
 
   // Get original handlers to extend them (stored in SDK's _requestHandlers Map)
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   const handlersMap = (server as any)._requestHandlers as Map<string, Function> | undefined;
   const originalListToolsHandler = handlersMap?.get('tools/list');
   const originalCallToolHandler = handlersMap?.get('tools/call');
@@ -103,7 +104,7 @@ export function registerSkillsAsMCPTools(
       try {
         const result = await originalListToolsHandler(request);
         tools = result.tools || [];
-      } catch (e) {
+      } catch (_e) {
         // If no original handler, start with empty array
         tools = [];
       }

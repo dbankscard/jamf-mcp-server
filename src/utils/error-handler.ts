@@ -3,7 +3,7 @@
  */
 
 import { createLogger } from '../server/logger.js';
-import { JamfAPIError, NetworkError, AuthenticationError, ValidationError } from './errors.js';
+import { JamfAPIError, NetworkError, AuthenticationError } from './errors.js';
 import { Request, Response, NextFunction } from 'express';
 
 const logger = createLogger('error-handler');
@@ -136,7 +136,7 @@ export function errorMiddleware(
  * Unhandled rejection handler
  */
 export function setupGlobalErrorHandlers(): void {
-  process.on('unhandledRejection', (reason, promise) => {
+  process.on('unhandledRejection', (reason, _promise) => {
     logger.error('Unhandled Rejection', {
       reason: reason instanceof Error ? reason.message : String(reason),
       stack: reason instanceof Error ? reason.stack : undefined,

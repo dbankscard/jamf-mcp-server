@@ -3,6 +3,9 @@
  */
 
 import { Request, Response } from 'express';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { JamfApiClientHybrid } from '../jamf-client-hybrid.js';
 import { createLogger } from './logger.js';
 import { getDefaultAgentPool } from '../utils/http-agent-pool.js';
@@ -38,7 +41,9 @@ export interface CheckResult {
  */
 function getVersion(): string {
   try {
-    const packageJson = require('../../package.json');
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const packageJson = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8'));
     return packageJson.version || 'unknown';
   } catch {
     return 'unknown';

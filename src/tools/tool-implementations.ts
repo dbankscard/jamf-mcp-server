@@ -4,8 +4,7 @@
  */
 
 import { JamfApiClientHybrid } from '../jamf-client-hybrid.js';
-import { JamfComputer, JamfComputerDetails, JamfPolicy, JamfScript, JamfConfigurationProfile, JamfPackage } from '../types/jamf-api.js';
-import { SearchParams, PaginationParams } from '../types/common.js';
+import { SearchParams } from '../types/common.js';
 
 // Helper function to parse Jamf dates
 const parseJamfDate = (date: string | Date | undefined): Date => {
@@ -160,7 +159,7 @@ export async function searchPolicies(client: JamfApiClientHybrid, params: any) {
 }
 
 export async function getPolicyDetails(client: JamfApiClientHybrid, params: any) {
-  const { policyId, includeScriptContent = false } = params;
+  const { policyId, includeScriptContent: _includeScriptContent = false } = params;
   const policy = await client.getPolicyDetails(policyId);
   
   const result: any = {

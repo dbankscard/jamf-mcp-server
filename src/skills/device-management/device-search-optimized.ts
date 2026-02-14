@@ -83,7 +83,7 @@ export async function deviceSearchOptimized(
   params: DeviceSearchParams
 ): Promise<SkillResult> {
   try {
-    const { query, searchType = 'all', limit = 50, includeDetails = false, filterBy, sortBy = 'name' } = params;
+    const { query, searchType = 'all', limit = 50, includeDetails: _includeDetails = false, filterBy, sortBy = 'name' } = params;
     
     let devices: any[] = [];
     let totalFound = 0;

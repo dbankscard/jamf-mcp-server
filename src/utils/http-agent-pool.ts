@@ -154,7 +154,6 @@ export class AgentPool {
    */
   private collectMetrics(): void {
     const httpsStatus = (this.httpsAgent as any).getCurrentStatus?.() || {};
-    const httpStatus = (this.httpAgent as any).getCurrentStatus?.() || {};
 
     this.metrics = {
       created: httpsStatus.createSocketCount || 0,

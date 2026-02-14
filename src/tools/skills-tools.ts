@@ -11,9 +11,6 @@ export function registerSkillTools(server: Server & { handleToolCall?: any }, sk
   // Initialize the skills manager with server context
   skillsManager.initialize(server);
 
-  // Get all MCP tool definitions from skills
-  const skillTools = skillsManager.getMCPTools();
-
   // Register handler for all skill tools
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;

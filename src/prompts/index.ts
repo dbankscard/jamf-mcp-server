@@ -2,9 +2,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
-  Prompt,
   PromptMessage,
-  TextContent,
 } from '@modelcontextprotocol/sdk/types.js';
 
 interface PromptArgument {

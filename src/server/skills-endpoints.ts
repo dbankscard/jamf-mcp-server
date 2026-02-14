@@ -151,7 +151,7 @@ export function createSkillsRouter(skillsManager: SkillsManager): Router {
 /**
  * Middleware to detect and optimize for ChatGPT
  */
-export function chatGPTOptimizationMiddleware(req: Request, res: Response, next: Function): void {
+export function chatGPTOptimizationMiddleware(req: Request, res: Response, next: () => void): void {
   const userAgent = req.headers['user-agent'] || '';
   
   if (userAgent.includes('ChatGPT')) {
