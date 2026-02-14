@@ -6,7 +6,7 @@ import { JamfComputer } from './types/jamf-api.js';
 import { isAxiosError, getErrorMessage, getAxiosErrorStatus, getAxiosErrorData } from './utils/type-guards.js';
 import { JamfAPIError } from './utils/errors.js';
 import { LRUCache } from './utils/lru-cache.js';
-import { XmlBuilder, xmlDocument, escapeXml } from './utils/xml-builder.js';
+import { xmlDocument, escapeXml } from './utils/xml-builder.js';
 import { retryWithBackoff, getRetryConfig } from './utils/retry.js';
 import { IJamfApiClient } from './types/jamf-client.js';
 
