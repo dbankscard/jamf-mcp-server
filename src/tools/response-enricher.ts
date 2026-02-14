@@ -662,7 +662,6 @@ function getEnrichment(toolName: string, data: any): Enrichment | null {
       // --- History tools ---
 
       case 'getComputerHistory': {
-        const parsed = typeof data === 'string' ? JSON.parse(data) : data;
         return {
           summary: 'Computer history retrieved.',
           suggestedNextActions: [
