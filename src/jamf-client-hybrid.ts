@@ -108,14 +108,14 @@ export class JamfApiClientHybrid implements IJamfApiClient {
     // Add request interceptor to handle auth based on endpoint
     this.axiosInstance.interceptors.request.use((config) => {
       if (config.url?.includes('/JSSResource/')) {
-        // Classic API: prefer Basic auth, but fall back to Bearer token
-        // (Jamf Classic API accepts both Basic and Bearer auth)
-        if (this.basicAuthHeader) {
-          config.headers['Authorization'] = this.basicAuthHeader;
-        } else if (this.oauth2Available && this.oauth2Token) {
+        // Classic API: prefer OAuth2/Bearer over Basic Auth
+        // (Basic Auth may be rejected while valid OAuth2 tokens work fine)
+        if (this.oauth2Available && this.oauth2Token) {
           config.headers['Authorization'] = `Bearer ${this.oauth2Token.token}`;
         } else if (this.bearerTokenAvailable && this.bearerToken) {
           config.headers['Authorization'] = `Bearer ${this.bearerToken.token}`;
+        } else if (this.basicAuthHeader) {
+          config.headers['Authorization'] = this.basicAuthHeader;
         }
       } else {
         // Jamf Pro API endpoints use Bearer token

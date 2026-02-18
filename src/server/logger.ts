@@ -37,6 +37,7 @@ export const createLogger = (label: string): winston.Logger => {
     transports.push(
       new winston.transports.Console({
         format: nodeEnv === 'development' ? consoleFormat : structuredFormat,
+        stderrLevels: ['error', 'warn', 'info', 'http', 'verbose', 'debug', 'silly'],
       })
     );
   }
