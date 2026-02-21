@@ -1,4 +1,4 @@
-# Jamf Pro MCP Server v2.1
+# Jamf Pro MCP Server v2.2
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
@@ -10,9 +10,16 @@
 
 A comprehensive MCP (Model Context Protocol) server that enables AI assistants to interact with Jamf Pro for complete Apple device management. Works with Claude Desktop and **ChatGPT** (via MCP Connectors).
 
-**108 tools** | **12 resources** | **12 workflow prompts** | **5 skills**
+**Two modes**: Classic Mode (108 individual tools) or **Code Mode** (2 tools + sandboxed JavaScript SDK)
 
-### What's New in v2.1
+### What's New in v2.2
+
+- **Code Mode** — a new execution model that exposes just 2 MCP tools (`jamf_search` + `jamf_execute`) instead of 108 individual tools. The agent writes JavaScript that runs in a sandboxed `node:vm` context with a typed Jamf API client, enabling complex multi-step workflows in a single tool call. Includes capability-based access control, budget tracking, plan/apply workflow, and an approval gate for high-impact commands.
+- **Concurrency limiting** — semaphore-style `ConcurrencyLimiter` (default 5, configurable via `JAMF_MAX_CONCURRENCY`) prevents 429 rate-limit errors. Applied to both the core API client and Code Mode sandbox.
+- **Policy caching** — `getPolicyDetails` results are now cached to avoid redundant API calls, with automatic invalidation on policy writes.
+- **Static computer group XML fix** — `createStaticComputerGroup` and `updateStaticComputerGroup` now use proper XML via `XmlBuilder` (with escaping) instead of broken JSON or raw template literals.
+
+### What's in v2.1
 
 - **108 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
 - **12 resources** — all returning live data including compliance, storage, OS versions, encryption, and patch reports
@@ -44,6 +51,56 @@ cd jamf-mcp-server
 ```
 
 See our [ChatGPT Quick Start Guide](chatgpt/QUICK_START.md) for 5-minute setup.
+
+## Code Mode (New)
+
+Code Mode replaces 108 individual MCP tools with just 2:
+
+| Tool | Purpose |
+|---|---|
+| `jamf_search` | Discover API methods — search by keyword, browse by category, view signatures and required capabilities |
+| `jamf_execute` | Run JavaScript in a sandboxed VM with access to the full Jamf API client |
+
+**Why Code Mode?** Traditional MCP tools map 1:1 to API calls. Code Mode lets the agent chain multiple calls, filter results, and build reports — all in a single tool invocation. This reduces round-trips, avoids context window bloat, and enables workflows that would require dozens of individual tool calls.
+
+**Safety features:**
+- **Plan/Apply workflow** — run with `mode: "plan"` to preview all writes without executing, then `mode: "apply"` to commit
+- **Capability-based access** — declare only the permissions your code needs (`read:computers`, `write:policies`, `command:mdm`, etc.)
+- **Budget tracking** — automatic call-count limits prevent runaway loops
+- **Approval gate** — high-impact commands (wipe, lock, delete) require an explicit approval token
+- **Concurrency throttling** — API calls are rate-limited to prevent 429 errors
+
+### Code Mode Configuration
+
+Use `dist/index-code.js` as the entry point instead of `dist/index-main.js`:
+
+```json
+{
+  "mcpServers": {
+    "jamf-code": {
+      "command": "node",
+      "args": ["/absolute/path/to/jamf-mcp-server/dist/index-code.js"],
+      "env": {
+        "JAMF_URL": "https://your-instance.jamfcloud.com",
+        "JAMF_CLIENT_ID": "your-api-client-id",
+        "JAMF_CLIENT_SECRET": "your-api-client-secret"
+      }
+    }
+  }
+}
+```
+
+### Code Mode Example
+
+```javascript
+// Find all computers not checked in for 30 days
+const computers = await jamf.getAllComputers(200);
+const stale = computers.filter(c => helpers.daysSince(c.lastContactTime) > 30);
+log(`Found ${stale.length} stale computers`);
+return stale.map(c => ({ id: c.id, name: c.name, lastContact: c.lastContactTime }));
+```
+
+## Classic Mode (108 Tools)
 
 ## What You Can Do
 
@@ -287,6 +344,7 @@ See [ChatGPT Connector Setup](chatgpt/CHATGPT_CONNECTOR_README.md) for detailed 
 {
   "env": {
     "JAMF_USE_ENHANCED_MODE": "true",
+    "JAMF_MAX_CONCURRENCY": "5",
     "JAMF_MAX_RETRIES": "3",
     "JAMF_RETRY_DELAY": "1000",
     "JAMF_RETRY_MAX_DELAY": "10000",
@@ -322,6 +380,8 @@ npm test             # Run tests
 - **Confirmation Required**: All destructive operations require explicit `confirm: true`
 - **Tool Annotations**: Each tool declares `readOnlyHint` and `destructiveHint` for client-side safety
 - **Client Credentials Authentication**: Supports Jamf Pro API roles and clients
+- **Concurrency Limiting**: Prevents 429 rate-limit errors (default 5 concurrent, configurable via `JAMF_MAX_CONCURRENCY`)
+- **Code Mode Sandbox**: `node:vm` isolation — no `require`, `import`, `fetch`, `fs`, or `process` access
 - **Rate Limiting**: Optional built-in rate limiter
 - **Circuit Breaker**: Optional circuit breaker for failure protection
 
@@ -339,11 +399,15 @@ For read-only mode:
 ## Architecture
 
 ```
-Claude Desktop  -->  MCP Server (stdio)  -->  Jamf Pro API
-ChatGPT         -->  Tunnel (Cloudflare)  -->  MCP Server (HTTP)  -->  Jamf Pro API
+                    ┌─ Classic Mode (108 tools) ──┐
+Claude Desktop ──>  │  MCP Server (stdio)          │──>  Jamf Pro API
+                    ├─ Code Mode (2 tools) ────────┤
+                    │  jamf_search + jamf_execute   │──>  (sandboxed VM)  ──>  Jamf Pro API
+                    └──────────────────────────────┘
+ChatGPT ──>  Tunnel (Cloudflare) ──>  MCP Server (HTTP)  ──>  Jamf Pro API
 ```
 
-The server uses a hybrid API client that supports both the Jamf Pro API and Classic API, with automatic fallback between them for maximum compatibility across Jamf Pro versions.
+The server uses a hybrid API client that supports both the Jamf Pro API and Classic API, with automatic fallback between them for maximum compatibility across Jamf Pro versions. All API calls pass through a concurrency limiter to prevent rate-limit errors.
 
 ## Troubleshooting
 
