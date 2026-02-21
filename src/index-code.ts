@@ -4,6 +4,13 @@
  * instead of the full 108-tool surface. The agent writes JavaScript code
  * against a typed SDK, executed in a sandboxed VM.
  */
+
+// Ensure MCP_MODE is set to suppress logger stdout/stderr pollution
+// (must be set before any logger is created)
+if (!process.env.MCP_MODE) {
+  process.env.MCP_MODE = 'true';
+}
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { JamfApiClientHybrid } from './jamf-client-hybrid.js';
