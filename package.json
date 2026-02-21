@@ -33,7 +33,8 @@
     "agent": "tsx src/agent/interface/CLIInterface.ts",
     "agent:simple": "tsx src/agent/simple-cli.ts",
     "agent:example": "tsx chatgpt/examples/agent-example.ts",
-    "agent:demo": "tsx chatgpt/examples/agent-demo.ts"
+    "agent:demo": "tsx chatgpt/examples/agent-demo.ts",
+    "benchmark": "npm run build:force && tsx benchmarks/run.ts"
   },
   "keywords": [
     "mcp",
