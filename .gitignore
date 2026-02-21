@@ -49,6 +49,10 @@ test-agent-*.md
 debug-*.ts
 test-*-simple.ts
 
+# Project rules and hooks (local only)
+CLAUDE.md
+scripts/pre-commit
+
 # Local documentation and notes
 MULTIPLE_GIT_ACCOUNTS.md
 reddit-post.md
