@@ -61,7 +61,9 @@ Code Mode replaces 108 individual MCP tools with just 2:
 | `jamf_search` | Discover API methods — search by keyword, browse by category, view signatures and required capabilities |
 | `jamf_execute` | Run JavaScript in a sandboxed VM with access to the full Jamf API client |
 
-**Why Code Mode?** Traditional MCP tools map 1:1 to API calls. Code Mode lets the agent chain multiple calls, filter results, and build reports — all in a single tool invocation. This reduces round-trips, avoids context window bloat, and enables workflows that would require dozens of individual tool calls.
+**Why Code Mode?** This implementation is inspired by [Cloudflare's Code Mode pattern](https://blog.cloudflare.com/code-mode-mcp/), which addresses a fundamental tension in MCP: agents need many tools to do useful work, but every tool definition consumes context window tokens. Cloudflare found that exposing their full API as individual MCP tools would consume over 1 million tokens — more than the entire context window of most models. Their solution: collapse everything into a `search` + `execute` pattern where agents discover APIs on demand and write code against a typed SDK, reducing token usage by up to 99.9%.
+
+We applied the same pattern to Jamf Pro. Our 108 Classic Mode tools consume ~40,000 tokens of tool definitions. Code Mode reduces that to ~1,000 tokens (2 tool definitions) while retaining access to the full API surface. The agent uses `jamf_search` to discover methods, then writes JavaScript that runs in a sandboxed `node:vm` context. This also enables multi-step workflows in a single tool call — chaining API calls, filtering results, and building reports without LLM round-trips between each step.
 
 **Safety features:**
 - **Plan/Apply workflow** — run with `mode: "plan"` to preview all writes without executing, then `mode: "apply"` to commit
@@ -98,6 +100,33 @@ const computers = await jamf.getAllComputers(200);
 const stale = computers.filter(c => helpers.daysSince(c.lastContactTime) > 30);
 log(`Found ${stale.length} stale computers`);
 return stale.map(c => ({ id: c.id, name: c.name, lastContact: c.lastContactTime }));
+```
+
+### Code Mode vs Classic Mode Benchmark
+
+Real numbers from a live Jamf Pro instance (`npm run benchmark`):
+
+| Scenario | Mode | Tool Calls | Time (ms) | Payload (bytes) |
+|---|---|---:|---:|---:|
+| Device details | classic | 1 | 503 | 143 |
+| Device details | code | 1 | 744 | 451 |
+| Stale computers (30d) | classic | 1 | 108 | 38,249 |
+| Stale computers (30d) | code | 1 | 188 | 9,373 |
+| Policies using package | classic | 1 | 14,173 | 111 |
+| Policies using package | code | 1 | 12,861 | 482 |
+| Multi-step fleet analysis | classic | 7 | 2,925 | 34,944 |
+| Multi-step fleet analysis | code | 1 | 2,309 | 14,994 |
+
+**Key takeaways:**
+
+- **Multi-step workflows**: 7 tool calls → 1 (86% fewer LLM round-trips, 21% faster wall-clock). In real usage the savings are even larger — each Classic tool call is an LLM inference round-trip costing seconds of latency and tokens.
+- **Smaller payloads**: Code Mode returns only the fields you ask for — 76% smaller for stale-computer queries (9 KB vs 38 KB), which means fewer tokens fed back to the LLM.
+- **Simple lookups**: Roughly equivalent. Classic's purpose-built tools have slightly less overhead for single-call operations.
+- **Bottom line**: Code Mode's value scales with task complexity. The more steps a workflow requires, the bigger the advantage.
+
+Run the benchmark yourself:
+```bash
+npm run benchmark   # requires JAMF_URL, JAMF_CLIENT_ID, JAMF_CLIENT_SECRET
 ```
 
 ## Classic Mode (108 Tools)
