@@ -25,8 +25,10 @@ import {
   getAllMethodNames,
 } from './policy-engine.js';
 import { DiffBuilder } from './diff-builder.js';
+import { ConcurrencyLimiter } from '../utils/throttle.js';
 
 const DEFAULT_TIMEOUT = 30_000;
+const sandboxThrottle = new ConcurrencyLimiter();
 
 /** Pending approval tokens: token → list of blocked operations. */
 const pendingApprovals = new Map<string, { method: string; args: unknown[] }[]>();
@@ -137,9 +139,9 @@ function createProxiedClient(
           }
         }
 
-        // 5. Execute the real method
+        // 5. Execute the real method (throttled to prevent 429s)
         const method = (target as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>)[prop];
-        const result = await method.apply(target, args);
+        const result = await sandboxThrottle.run(() => method.apply(target, args));
         diff.record(classification, prop, args, result);
         return result;
       };
