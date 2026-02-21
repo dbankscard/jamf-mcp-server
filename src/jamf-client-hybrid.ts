@@ -8,10 +8,12 @@ import { JamfAPIError } from './utils/errors.js';
 import { LRUCache } from './utils/lru-cache.js';
 import { xmlDocument, escapeXml } from './utils/xml-builder.js';
 import { retryWithBackoff, getRetryConfig } from './utils/retry.js';
+import { ConcurrencyLimiter } from './utils/throttle.js';
 import { IJamfApiClient } from './types/jamf-client.js';
 
 const logger = createLogger('jamf-client-hybrid');
 const agentPool = getDefaultAgentPool();
+const apiThrottle = new ConcurrencyLimiter();
 
 export interface JamfApiClientConfig {
   baseUrl: string;
@@ -665,6 +667,7 @@ export class JamfApiClientHybrid implements IJamfApiClient {
   // Execute policy (if not in read-only mode)
   async executePolicy(policyId: string, deviceIds: string[]): Promise<void> {
     this.invalidateCache('listPolicies');
+    this.invalidateCache('policyDetails');
     for (const id of deviceIds) {
       this.invalidateCache(`computerDetails:${id}`);
     }
@@ -737,15 +740,14 @@ export class JamfApiClientHybrid implements IJamfApiClient {
   }
 
   // List policies (cached for 60s)
-  async listPolicies(limit: number = 100): Promise<any[]> {
-    return this.cachedGet(`listPolicies:${limit}`, async () => {
+  async listPolicies(limit: number = 1000): Promise<any[]> {
+    return this.cachedGet('listPolicies', async () => {
       await this.ensureAuthenticated();
 
       try {
-        // Try Classic API (policies are typically in Classic API)
+        // Classic API returns all policies in one call (no server-side pagination)
         const response = await this.axiosInstance.get('/JSSResource/policies');
-        const policies = response.data.policies || [];
-        return policies.slice(0, limit);
+        return response.data.policies || [];
       } catch (error) {
         logger.error('Failed to list policies:', { error: getErrorMessage(error) });
         return [];
@@ -776,20 +778,22 @@ export class JamfApiClientHybrid implements IJamfApiClient {
     }
   }
 
-  // Get policy details
+  // Get policy details (cached)
   async getPolicyDetails(policyId: string): Promise<any> {
     await this.ensureAuthenticated();
-    
-    try {
-      const response = await this.axiosInstance.get(`/JSSResource/policies/id/${policyId}`);
-      return response.data.policy;
-    } catch (error) {
-      if (isAxiosError(error)) {
-        throw JamfAPIError.fromAxiosError(error, { operation: 'getPolicyDetails', policyId });
+
+    return this.cachedGet(`policyDetails:${policyId}`, async () => {
+      try {
+        const response = await this.axiosInstance.get(`/JSSResource/policies/id/${policyId}`);
+        return response.data.policy;
+      } catch (error) {
+        if (isAxiosError(error)) {
+          throw JamfAPIError.fromAxiosError(error, { operation: 'getPolicyDetails', policyId });
+        }
+        logger.error('Failed to get policy details:', { error: getErrorMessage(error) });
+        throw error;
       }
-      logger.error('Failed to get policy details:', { error: getErrorMessage(error) });
-      throw error;
-    }
+    });
   }
 
   /**
@@ -797,6 +801,7 @@ export class JamfApiClientHybrid implements IJamfApiClient {
    */
   async createPolicy(policyData: any): Promise<any> {
     this.invalidateCache('listPolicies');
+    this.invalidateCache('policyDetails');
     if (this.readOnlyMode) {
       throw new Error('Cannot create policies in read-only mode');
     }
@@ -858,6 +863,7 @@ export class JamfApiClientHybrid implements IJamfApiClient {
    */
   async updatePolicy(policyId: string, policyData: any): Promise<any> {
     this.invalidateCache('listPolicies');
+    this.invalidateCache('policyDetails');
     if (this.readOnlyMode) {
       throw new Error('Cannot update policies in read-only mode');
     }
@@ -1051,6 +1057,7 @@ export class JamfApiClientHybrid implements IJamfApiClient {
    */
   async deletePolicy(policyId: string): Promise<void> {
     this.invalidateCache('listPolicies');
+    this.invalidateCache('policyDetails');
     if (this.readOnlyMode) {
       throw new Error('Cannot delete policies in read-only mode');
     }
@@ -1647,32 +1654,29 @@ export class JamfApiClientHybrid implements IJamfApiClient {
       const policies = await this.listPolicies(1000);
       const policiesUsingPackage: any[] = [];
 
-      // Fetch policy details in parallel batches of 10
-      const batchSize = 10;
-      for (let i = 0; i < policies.length; i += batchSize) {
-        const batch = policies.slice(i, i + batchSize);
-        const results = await Promise.allSettled(
-          batch.map(policy => this.getPolicyDetails(policy.id))
-        );
+      // Fetch all policy details with bounded concurrency
+      const results = await apiThrottle.mapSettled(
+        policies,
+        (policy) => this.getPolicyDetails(policy.id),
+      );
 
-        for (let j = 0; j < results.length; j++) {
-          const result = results[j];
-          if (result.status !== 'fulfilled') continue;
-          const policyDetails = result.value;
-          const packagesInPolicy = policyDetails.package_configuration?.packages || [];
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        if (result.status !== 'fulfilled') continue;
+        const policyDetails = result.value;
+        const packagesInPolicy = policyDetails.package_configuration?.packages || [];
 
-          if (packagesInPolicy.some((p: any) => String(p.id) === String(packageId))) {
-            policiesUsingPackage.push({
-              id: batch[j].id,
-              name: batch[j].name,
-              enabled: policyDetails.general?.enabled,
-              frequency: policyDetails.general?.frequency,
-              category: policyDetails.category,
-              targetedComputers: policyDetails.scope?.computers?.length || 0,
-              targetedComputerGroups: policyDetails.scope?.computer_groups?.length || 0,
-              packageAction: packagesInPolicy.find((p: any) => String(p.id) === String(packageId))?.action || 'Install',
-            });
-          }
+        if (packagesInPolicy.some((p: any) => String(p.id) === String(packageId))) {
+          policiesUsingPackage.push({
+            id: policies[i].id,
+            name: policies[i].name,
+            enabled: policyDetails.general?.enabled,
+            frequency: policyDetails.general?.frequency,
+            category: policyDetails.category,
+            targetedComputers: policyDetails.scope?.computers?.length || 0,
+            targetedComputerGroups: policyDetails.scope?.computer_groups?.length || 0,
+            packageAction: packagesInPolicy.find((p: any) => String(p.id) === String(packageId))?.action || 'Install',
+          });
         }
       }
 
@@ -1789,49 +1793,52 @@ export class JamfApiClientHybrid implements IJamfApiClient {
   }
 
   /**
-   * Create static computer group
+   * Build XML payload for a static computer group (Classic API requires XML).
+   */
+  private buildComputerGroupXml(name: string, computerIds: string[]): string {
+    const doc = xmlDocument('computer_group');
+    doc.element('name', name);
+    doc.element('is_smart', false);
+    doc.open('computers');
+    for (const id of computerIds) {
+      doc.open('computer').element('id', id).close('computer');
+    }
+    doc.close('computers');
+    doc.close('computer_group');
+    return doc.build();
+  }
+
+  /**
+   * Create static computer group (Classic API with XML)
    */
   async createStaticComputerGroup(name: string, computerIds: string[]): Promise<any> {
     if (this.readOnlyMode) {
       throw new Error('Cannot create computer groups in read-only mode');
     }
-    
+
     await this.ensureAuthenticated();
-    
+
     try {
-      // Try Jamf Pro API first
-      logger.info(`Creating static computer group "${name}" using Jamf Pro API...`);
-      
-      const payload = {
-        name: name,
-        isSmart: false,
-        computers: computerIds.map(id => ({ id: parseInt(id) })),
-      };
-      
-      const response = await this.axiosInstance.post('/api/v1/computer-groups', payload);
-      return response.data;
-    } catch (_error) {
-      logger.debug('Jamf Pro API failed, trying Classic API...');
-      
-      // Fall back to Classic API
-      try {
-        const payload = {
-          computer_group: {
-            name: name,
-            is_smart: false,
-            computers: computerIds.map(id => ({ id: parseInt(id) })),
+      logger.info(`Creating static computer group "${name}" using Classic API with XML...`);
+      const xmlPayload = this.buildComputerGroupXml(name, computerIds);
+
+      const response = await this.axiosInstance.post(
+        '/JSSResource/computergroups/id/0',
+        xmlPayload,
+        {
+          headers: {
+            'Content-Type': 'application/xml',
+            'Accept': 'application/xml',
           }
-        };
-        
-        const response = await this.axiosInstance.post('/JSSResource/computergroups/id/0', payload);
-        return response.data.computer_group;
-      } catch (classicError) {
-        if (isAxiosError(classicError)) {
-          throw JamfAPIError.fromAxiosError(classicError, { operation: 'createStaticComputerGroup', name });
         }
-        logger.error('Classic API also failed:', { error: getErrorMessage(classicError) });
-        throw classicError;
+      );
+      return response.data.computer_group ?? response.data;
+    } catch (error) {
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'createStaticComputerGroup', name });
       }
+      logger.error('Failed to create static computer group:', { error: getErrorMessage(error) });
+      throw error;
     }
   }
 
@@ -1842,32 +1849,19 @@ export class JamfApiClientHybrid implements IJamfApiClient {
     if (this.readOnlyMode) {
       throw new Error('Cannot update computer groups in read-only mode');
     }
-    
+
     await this.ensureAuthenticated();
-    
+
     // First get the group details to ensure it's a static group
     const groupDetails = await this.getComputerGroupDetails(groupId);
     if (groupDetails.is_smart || groupDetails.isSmart) {
       throw new Error('Cannot update membership of a smart group. Smart groups are defined by criteria.');
     }
-    
-    // Computer groups are only available through Classic API
-    // Classic API requires XML format for updates
+
     try {
       logger.info(`Updating static computer group ${groupId} using Classic API with XML...`);
-      
-      // Build XML payload
-      const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?>
-<computer_group>
-  <name>${groupDetails.name}</name>
-  <is_smart>false</is_smart>
-  <computers>
-    ${computerIds.map(id => `<computer><id>${id}</id></computer>`).join('\n    ')}
-  </computers>
-</computer_group>`;
-      
-      logger.info('Sending XML payload:', xmlPayload);
-      
+      const xmlPayload = this.buildComputerGroupXml(groupDetails.name, computerIds);
+
       await this.axiosInstance.put(
         `/JSSResource/computergroups/id/${groupId}`,
         xmlPayload,
@@ -1878,16 +1872,11 @@ export class JamfApiClientHybrid implements IJamfApiClient {
           }
         }
       );
-      
-      // The Classic API returns XML, but might also return an empty response on success
-      // Let's return the updated group details by fetching them
-      logger.info('Update request completed, fetching updated group details...');
+
+      // Fetch and return the updated group details
       try {
-        const updatedGroup = await this.getComputerGroupDetails(groupId);
-        return updatedGroup;
+        return await this.getComputerGroupDetails(groupId);
       } catch (_fetchError) {
-        // If we can't fetch the updated details, just return a success indicator
-        logger.info('Could not fetch updated group details, but update likely succeeded');
         return { id: groupId, success: true };
       }
     } catch (error) {
