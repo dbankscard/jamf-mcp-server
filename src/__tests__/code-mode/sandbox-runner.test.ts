@@ -57,6 +57,8 @@ function createMockClient(overrides: Partial<IJamfApiClient> = {}): IJamfApiClie
     sendMDMCommand: jest.fn().mockResolvedValue(undefined),
     getMobileDeviceGroups: jest.fn().mockResolvedValue([]),
     getMobileDeviceGroupDetails: jest.fn().mockResolvedValue({}),
+    listMobileDeviceApplications: jest.fn().mockResolvedValue([{ id: '123', name: 'Example Mobile App' }]),
+    getMobileDeviceApplicationDetails: jest.fn().mockResolvedValue({ general: { id: '123', name: 'Example Mobile App' } }),
     getInventorySummary: jest.fn().mockResolvedValue({}),
     getPolicyComplianceReport: jest.fn().mockResolvedValue({}),
     getPackageDeploymentStats: jest.fn().mockResolvedValue({}),
@@ -153,6 +155,34 @@ describe('SandboxRunner', () => {
       expect(result.logs.some(l => l.msg.some(m =>
         typeof m === 'string' && m.includes('Access denied'),
       ))).toBe(true);
+    });
+
+    it('executes mobile device application reads with their dedicated capability', async () => {
+      const client = createMockClient();
+      const result = await execute(client, {
+        code: 'return await jamf.listMobileDeviceApplications();',
+        mode: 'plan',
+        capabilities: ['read:mobile_device_applications'],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.returnValue).toEqual([{ id: '123', name: 'Example Mobile App' }]);
+      expect(result.metrics.reads).toBe(1);
+      expect(client.listMobileDeviceApplications).toHaveBeenCalledWith();
+    });
+
+    it('executes mobile device application detail reads with their dedicated capability', async () => {
+      const client = createMockClient();
+      const result = await execute(client, {
+        code: 'return await jamf.getMobileDeviceApplicationDetails("123");',
+        mode: 'plan',
+        capabilities: ['read:mobile_device_applications'],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.returnValue).toEqual({ general: { id: '123', name: 'Example Mobile App' } });
+      expect(result.metrics.reads).toBe(1);
+      expect(client.getMobileDeviceApplicationDetails).toHaveBeenCalledWith('123');
     });
   });
 

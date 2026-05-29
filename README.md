@@ -4,24 +4,24 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue)](https://www.typescriptlang.org/)
 [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-1.0.0-purple)](https://github.com/modelcontextprotocol/sdk)
-[![Tools](https://img.shields.io/badge/Tools-108-orange)]()
+[![Tools](https://img.shields.io/badge/Tools-110-orange)]()
 [![Resources](https://img.shields.io/badge/Resources-12-green)]()
 [![Prompts](https://img.shields.io/badge/Prompts-12-blue)]()
 
 A comprehensive MCP (Model Context Protocol) server that enables AI assistants to interact with Jamf Pro for complete Apple device management. Works with Claude Desktop and **ChatGPT** (via MCP Connectors).
 
-**Two modes**: Classic Mode (108 individual tools) or **Code Mode** (2 tools + sandboxed JavaScript SDK)
+**Two modes**: Classic Mode (110 individual tools) or **Code Mode** (2 tools + sandboxed JavaScript SDK)
 
 ### What's New in v2.2
 
-- **Code Mode** — a new execution model that exposes just 2 MCP tools (`jamf_search` + `jamf_execute`) instead of 108 individual tools. The agent writes JavaScript that runs in a sandboxed `node:vm` context with a typed Jamf API client, enabling complex multi-step workflows in a single tool call. Includes capability-based access control, budget tracking, plan/apply workflow, and an approval gate for high-impact commands.
+- **Code Mode** — a new execution model that exposes just 2 MCP tools (`jamf_search` + `jamf_execute`) instead of 110 individual tools. The agent writes JavaScript that runs in a sandboxed `node:vm` context with a typed Jamf API client, enabling complex multi-step workflows in a single tool call. Includes capability-based access control, budget tracking, plan/apply workflow, and an approval gate for high-impact commands.
 - **Concurrency limiting** — semaphore-style `ConcurrencyLimiter` (default 5, configurable via `JAMF_MAX_CONCURRENCY`) prevents 429 rate-limit errors. Applied to both the core API client and Code Mode sandbox.
 - **Policy caching** — `getPolicyDetails` results are now cached to avoid redundant API calls, with automatic invalidation on policy writes.
 - **Static computer group XML fix** — `createStaticComputerGroup` and `updateStaticComputerGroup` now use proper XML via `XmlBuilder` (with escaping) instead of broken JSON or raw template literals.
 
 ### What's in v2.1
 
-- **108 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
+- **110 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
 - **12 resources** — all returning live data including compliance, storage, OS versions, encryption, and patch reports
 - **12 workflow prompts** — guided templates for common admin tasks like onboarding, offboarding, security audits, and staged rollouts
 - **Compound tools** — single-call operations like `getFleetOverview`, `getDeviceFullProfile`, `getSecurityPosture`, and `getPolicyAnalysis` that combine multiple API calls behind the scenes
@@ -54,7 +54,7 @@ See our [ChatGPT Quick Start Guide](chatgpt/QUICK_START.md) for 5-minute setup.
 
 ## Code Mode (New)
 
-Code Mode replaces 108 individual MCP tools with just 2:
+Code Mode replaces 110 individual MCP tools with just 2:
 
 | Tool | Purpose |
 |---|---|
@@ -63,7 +63,7 @@ Code Mode replaces 108 individual MCP tools with just 2:
 
 **Why Code Mode?** This implementation is inspired by [Cloudflare's Code Mode pattern](https://blog.cloudflare.com/code-mode-mcp/), which addresses a fundamental tension in MCP: agents need many tools to do useful work, but every tool definition consumes context window tokens. Cloudflare found that exposing their full API as individual MCP tools would consume over 1 million tokens — more than the entire context window of most models. Their solution: collapse everything into a `search` + `execute` pattern where agents discover APIs on demand and write code against a typed SDK, reducing token usage by up to 99.9%.
 
-We applied the same pattern to Jamf Pro. Our 108 Classic Mode tools consume ~40,000 tokens of tool definitions. Code Mode reduces that to ~1,000 tokens (2 tool definitions) while retaining access to the full API surface. The agent uses `jamf_search` to discover methods, then writes JavaScript that runs in a sandboxed `node:vm` context. This also enables multi-step workflows in a single tool call — chaining API calls, filtering results, and building reports without LLM round-trips between each step.
+We applied the same pattern to Jamf Pro. Our 110 Classic Mode tools consume ~40,000 tokens of tool definitions. Code Mode reduces that to ~1,000 tokens (2 tool definitions) while retaining access to the full API surface. The agent uses `jamf_search` to discover methods, then writes JavaScript that runs in a sandboxed `node:vm` context. This also enables multi-step workflows in a single tool call — chaining API calls, filtering results, and building reports without LLM round-trips between each step.
 
 **Safety features:**
 - **Plan/Apply workflow** — run with `mode: "plan"` to preview all writes without executing, then `mode: "apply"` to commit
@@ -129,7 +129,7 @@ Run the benchmark yourself:
 npm run benchmark   # requires JAMF_URL, JAMF_CLIENT_ID, JAMF_CLIENT_SECRET
 ```
 
-## Classic Mode (108 Tools)
+## Classic Mode (110 Tools)
 
 ## What You Can Do
 
@@ -143,7 +143,7 @@ Ask natural language questions about your Jamf fleet:
 - "Retrieve the LAPS password for this device"
 - "Show me patch compliance across the fleet"
 
-## Tools (108)
+## Tools (110)
 
 ### Compound Tools (Start Here)
 These combine multiple API calls into a single operation:
@@ -223,6 +223,8 @@ These combine multiple API calls into a single operation:
 - **searchMobileDevices**: Search mobile devices by name, serial, or UDID
 - **getMobileDeviceDetails**: Detailed mobile device information
 - **listMobileDevices**: List all mobile devices
+- **listMobileDeviceApplications**: List mobile device applications configured for delivery
+- **getMobileDeviceApplicationDetails**: Get a delivered mobile application definition and scope details
 - **updateMobileDeviceInventory**: Force inventory update on a mobile device
 - **sendMDMCommand**: Send MDM commands — lock, wipe, clear passcode, lost mode, settings (requires confirmation)
 - **listMobileDeviceGroups**: List mobile device groups
@@ -428,7 +430,7 @@ For read-only mode:
 ## Architecture
 
 ```
-                    ┌─ Classic Mode (108 tools) ──┐
+                    ┌─ Classic Mode (110 tools) ──┐
 Claude Desktop ──>  │  MCP Server (stdio)          │──>  Jamf Pro API
                     ├─ Code Mode (2 tools) ────────┤
                     │  jamf_search + jamf_execute   │──>  (sandboxed VM)  ──>  Jamf Pro API

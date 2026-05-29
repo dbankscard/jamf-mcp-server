@@ -5,7 +5,7 @@ describe('SearchIndex', () => {
   describe('getAllEntries', () => {
     it('returns all catalog entries', () => {
       const entries = getAllEntries();
-      // 111 API methods + 3 helpers
+      // API methods plus helper functions
       expect(entries.length).toBeGreaterThan(100);
     });
 
@@ -55,6 +55,16 @@ describe('SearchIndex', () => {
     it('finds methods by description keywords', () => {
       const results = search('serial number');
       expect(results.length).toBeGreaterThan(0);
+    });
+
+    it('finds mobile device application delivery inventory', () => {
+      const results = search('mobile device applications');
+      expect(results.map(result => result.name)).toContain('listMobileDeviceApplications');
+      expect(results.map(result => result.name)).toContain('getMobileDeviceApplicationDetails');
+      expect(results.find(result => result.name === 'listMobileDeviceApplications')).toMatchObject({
+        capabilities: ['read:mobile_device_applications'],
+        readOnly: true,
+      });
     });
 
     it('ranks exact name matches highest', () => {

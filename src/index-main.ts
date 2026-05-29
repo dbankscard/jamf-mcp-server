@@ -14,7 +14,7 @@ const USE_ENHANCED_MODE =
   process.env.JAMF_ENABLE_RATE_LIMITING === 'true' ||
   process.env.JAMF_ENABLE_CIRCUIT_BREAKER === 'true';
 
-// Code mode: 2 tools (jamf_search + jamf_execute) instead of 108
+// Code mode: 2 tools (jamf_search + jamf_execute) instead of 110
 if (USE_CODE_MODE) {
   import('./index-code.js').then(_module => {
     // Module will auto-execute
