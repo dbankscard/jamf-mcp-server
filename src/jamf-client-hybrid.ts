@@ -741,7 +741,7 @@ export class JamfApiClientHybrid implements IJamfApiClient {
 
   // List policies (cached for 60s)
   async listPolicies(limit: number = 1000): Promise<any[]> {
-    return this.cachedGet('listPolicies', async () => {
+    const policies = await this.cachedGet('listPolicies', async () => {
       await this.ensureAuthenticated();
 
       try {
@@ -753,6 +753,7 @@ export class JamfApiClientHybrid implements IJamfApiClient {
         return [];
       }
     });
+    return policies.slice(0, limit);
   }
 
   // Search policies (uses cached listPolicies internally)
