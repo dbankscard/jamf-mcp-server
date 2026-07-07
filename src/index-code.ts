@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Code Mode entry point — exposes just 2 MCP tools (jamf_search + jamf_execute)
- * instead of the full 108-tool surface. The agent writes JavaScript code
+ * instead of the full 110-tool surface. The agent writes JavaScript code
  * against a typed SDK, executed in a sandboxed VM.
  */
 
@@ -64,7 +64,7 @@ const server = new Server(
 
 ## How Code Mode Works
 
-Instead of 108 individual tools, you have 2 tools:
+Instead of 110 individual tools, you have 2 tools:
 
 1. **jamf_search** — Discover available API methods, their signatures, required capabilities, and categories.
 2. **jamf_execute** — Execute JavaScript code in a sandbox with access to the full Jamf API.
@@ -136,7 +136,7 @@ async function run() {
       rejectUnauthorized: process.env.JAMF_ALLOW_INSECURE !== 'true',
     });
 
-    // Register Code Mode tools (2 tools instead of 108)
+    // Register Code Mode tools (2 tools instead of 110)
     registerCodeModeTools(server, jamfClient);
 
     // Resources and prompts are still available

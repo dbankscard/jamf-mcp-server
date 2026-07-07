@@ -76,6 +76,10 @@ const CATALOG: SearchIndexEntry[] = [
   { name: 'getMobileDeviceGroups',       signature: '(type?: GroupType) => Promise<any[]>',     description: 'List mobile device groups',               category: 'mobile_devices', capabilities: ['read:mobile_devices'], readOnly: true },
   { name: 'getMobileDeviceGroupDetails', signature: '(groupId: string) => Promise<any>',        description: 'Get details for a mobile device group',   category: 'mobile_devices', capabilities: ['read:mobile_devices'], readOnly: true },
 
+  // ── Mobile Device Applications ───────────────────────────────────
+  { name: 'listMobileDeviceApplications', signature: '() => Promise<any[]>', description: 'List all mobile device applications configured for delivery', category: 'mobile_device_applications', capabilities: ['read:mobile_device_applications'], readOnly: true },
+  { name: 'getMobileDeviceApplicationDetails', signature: '(applicationId: string) => Promise<any>', description: 'Get details for a mobile device application configured for delivery', category: 'mobile_device_applications', capabilities: ['read:mobile_device_applications'], readOnly: true },
+
   // ── Reports & Analytics ──────────────────────────────────────────
   { name: 'getInventorySummary',        signature: '() => Promise<any>',                             description: 'Get fleet-wide inventory summary (counts, OS versions, models)',   category: 'reports', capabilities: ['read:reports'], readOnly: true },
   { name: 'getPolicyComplianceReport',  signature: '(policyId: string) => Promise<any>',             description: 'Get compliance report for a specific policy',                      category: 'reports', capabilities: ['read:reports'], readOnly: true },

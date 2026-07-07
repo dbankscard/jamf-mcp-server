@@ -83,6 +83,10 @@ const METHOD_POLICIES: Record<string, MethodPolicy> = {
   getMobileDeviceGroups:        { classification: 'read', capability: 'read:mobile_devices' },
   getMobileDeviceGroupDetails:  { classification: 'read', capability: 'read:mobile_devices' },
 
+  // Mobile Device Applications
+  listMobileDeviceApplications: { classification: 'read', capability: 'read:mobile_device_applications' },
+  getMobileDeviceApplicationDetails: { classification: 'read', capability: 'read:mobile_device_applications' },
+
   // Reports & Analytics
   getInventorySummary:          { classification: 'read', capability: 'read:reports' },
   getPolicyComplianceReport:    { classification: 'read', capability: 'read:reports' },

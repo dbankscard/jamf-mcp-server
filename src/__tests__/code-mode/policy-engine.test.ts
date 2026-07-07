@@ -15,6 +15,15 @@ describe('PolicyEngine', () => {
       expect(policy).toEqual({ classification: 'read', capability: 'read:computers' });
     });
 
+    it('requires a dedicated capability for mobile device applications', () => {
+      const policy = getMethodPolicy('listMobileDeviceApplications');
+      expect(policy).toEqual({
+        classification: 'read',
+        capability: 'read:mobile_device_applications',
+      });
+      expect(getMethodPolicy('getMobileDeviceApplicationDetails')).toEqual(policy);
+    });
+
     it('returns undefined for unknown methods', () => {
       expect(getMethodPolicy('nonExistentMethod')).toBeUndefined();
     });
@@ -24,6 +33,12 @@ describe('PolicyEngine', () => {
     it('allows access when capability is granted', () => {
       const result = checkAccess('getAllComputers', ['read:computers']);
       expect(result.allowed).toBe(true);
+    });
+
+    it('does not grant application delivery reads with mobile device inventory access', () => {
+      const result = checkAccess('listMobileDeviceApplications', ['read:mobile_devices']);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain('read:mobile_device_applications');
     });
 
     it('denies access when capability is not granted', () => {

@@ -1999,6 +1999,44 @@ export class JamfApiClientHybrid implements IJamfApiClient {
   }
 
   /**
+   * List all mobile device applications configured for delivery
+   */
+  async listMobileDeviceApplications(): Promise<any[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info('Listing mobile device applications using Classic API...');
+      const response = await this.axiosInstance.get('/JSSResource/mobiledeviceapplications');
+      return response.data.mobile_device_applications || [];
+    } catch (error) {
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'listMobileDeviceApplications' });
+      }
+      logger.error('Failed to list mobile device applications:', { error: getErrorMessage(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Get details for a mobile device application configured for delivery
+   */
+  async getMobileDeviceApplicationDetails(applicationId: string): Promise<any> {
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting mobile device application details for ${applicationId} using Classic API...`);
+      const response = await this.axiosInstance.get(`/JSSResource/mobiledeviceapplications/id/${applicationId}`);
+      return response.data.mobile_device_application;
+    } catch (error) {
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, { operation: 'getMobileDeviceApplicationDetails', applicationId });
+      }
+      logger.error('Failed to get mobile device application details:', { error: getErrorMessage(error) });
+      throw error;
+    }
+  }
+
+  /**
    * Update mobile device inventory
    */
   async updateMobileDeviceInventory(deviceId: string): Promise<void> {

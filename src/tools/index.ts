@@ -186,6 +186,12 @@ const ListMobileDevicesSchema = z.object({
   limit: z.number().optional().default(50).describe('Maximum number of mobile devices to return'),
 });
 
+const ListMobileDeviceApplicationsSchema = z.object({});
+
+const GetMobileDeviceApplicationDetailsSchema = z.object({
+  applicationId: z.string().describe('The mobile device application ID'),
+});
+
 const UpdateMobileDeviceInventorySchema = z.object({
   deviceId: z.string().describe('The mobile device ID to update inventory for'),
 });
@@ -1404,6 +1410,30 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
               default: 50,
             },
           },
+        },
+        annotations: { readOnlyHint: true, destructiveHint: false },
+      },
+      {
+        name: 'listMobileDeviceApplications',
+        description: 'List all mobile device applications configured for delivery in Jamf Pro',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+        annotations: { readOnlyHint: true, destructiveHint: false },
+      },
+      {
+        name: 'getMobileDeviceApplicationDetails',
+        description: 'Get detailed information about a mobile device application configured for delivery in Jamf Pro',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            applicationId: {
+              type: 'string',
+              description: 'The mobile device application ID',
+            },
+          },
+          required: ['applicationId'],
         },
         annotations: { readOnlyHint: true, destructiveHint: false },
       },
@@ -3988,6 +4018,33 @@ export function registerTools(server: Server, jamfClient: IJamfApiClient): void 
                 supervised: d.supervised,
               })),
             }, null, 2),
+          };
+
+          return { content: [content] };
+        }
+
+        case 'listMobileDeviceApplications': {
+          ListMobileDeviceApplicationsSchema.parse(args);
+          const applications = await jamfClient.listMobileDeviceApplications();
+
+          const content: TextContent = {
+            type: 'text',
+            text: JSON.stringify({
+              count: applications.length,
+              applications,
+            }, null, 2),
+          };
+
+          return { content: [content] };
+        }
+
+        case 'getMobileDeviceApplicationDetails': {
+          const { applicationId } = GetMobileDeviceApplicationDetailsSchema.parse(args);
+          const application = await jamfClient.getMobileDeviceApplicationDetails(applicationId);
+
+          const content: TextContent = {
+            type: 'text',
+            text: JSON.stringify(application, null, 2),
           };
 
           return { content: [content] };
