@@ -4,24 +4,24 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue)](https://www.typescriptlang.org/)
 [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-1.0.0-purple)](https://github.com/modelcontextprotocol/sdk)
-[![Tools](https://img.shields.io/badge/Tools-110-orange)]()
+[![Tools](https://img.shields.io/badge/Tools-115-orange)]()
 [![Resources](https://img.shields.io/badge/Resources-12-green)]()
 [![Prompts](https://img.shields.io/badge/Prompts-12-blue)]()
 
 A comprehensive MCP (Model Context Protocol) server that enables AI assistants to interact with Jamf Pro for complete Apple device management. Works with Claude Desktop and **ChatGPT** (via MCP Connectors).
 
-**Two modes**: Classic Mode (110 individual tools) or **Code Mode** (2 tools + sandboxed JavaScript SDK)
+**Two modes**: Classic Mode (115 individual tools) or **Code Mode** (2 tools + sandboxed JavaScript SDK)
 
 ### What's New in v2.2
 
-- **Code Mode** — a new execution model that exposes just 2 MCP tools (`jamf_search` + `jamf_execute`) instead of 110 individual tools. The agent writes JavaScript that runs in a sandboxed `node:vm` context with a typed Jamf API client, enabling complex multi-step workflows in a single tool call. Includes capability-based access control, budget tracking, plan/apply workflow, and an approval gate for high-impact commands.
+- **Code Mode** — a new execution model that exposes just 2 MCP tools (`jamf_search` + `jamf_execute`) instead of 115 individual tools. The agent writes JavaScript that runs in a sandboxed `node:vm` context with a typed Jamf API client, enabling complex multi-step workflows in a single tool call. Includes capability-based access control, budget tracking, plan/apply workflow, and an approval gate for high-impact commands.
 - **Concurrency limiting** — semaphore-style `ConcurrencyLimiter` (default 5, configurable via `JAMF_MAX_CONCURRENCY`) prevents 429 rate-limit errors. Applied to both the core API client and Code Mode sandbox.
 - **Policy caching** — `getPolicyDetails` results are now cached to avoid redundant API calls, with automatic invalidation on policy writes.
 - **Static computer group XML fix** — `createStaticComputerGroup` and `updateStaticComputerGroup` now use proper XML via `XmlBuilder` (with escaping) instead of broken JSON or raw template literals.
 
 ### What's in v2.1
 
-- **110 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
+- **115 tools** (up from 56) — expanded coverage across the full Jamf Pro API and Classic API
 - **12 resources** — all returning live data including compliance, storage, OS versions, encryption, and patch reports
 - **12 workflow prompts** — guided templates for common admin tasks like onboarding, offboarding, security audits, and staged rollouts
 - **Compound tools** — single-call operations like `getFleetOverview`, `getDeviceFullProfile`, `getSecurityPosture`, and `getPolicyAnalysis` that combine multiple API calls behind the scenes
@@ -54,7 +54,7 @@ See our [ChatGPT Quick Start Guide](chatgpt/QUICK_START.md) for 5-minute setup.
 
 ## Code Mode (New)
 
-Code Mode replaces 110 individual MCP tools with just 2:
+Code Mode replaces 115 individual MCP tools with just 2:
 
 | Tool | Purpose |
 |---|---|
@@ -63,7 +63,7 @@ Code Mode replaces 110 individual MCP tools with just 2:
 
 **Why Code Mode?** This implementation is inspired by [Cloudflare's Code Mode pattern](https://blog.cloudflare.com/code-mode-mcp/), which addresses a fundamental tension in MCP: agents need many tools to do useful work, but every tool definition consumes context window tokens. Cloudflare found that exposing their full API as individual MCP tools would consume over 1 million tokens — more than the entire context window of most models. Their solution: collapse everything into a `search` + `execute` pattern where agents discover APIs on demand and write code against a typed SDK, reducing token usage by up to 99.9%.
 
-We applied the same pattern to Jamf Pro. Our 110 Classic Mode tools consume ~40,000 tokens of tool definitions. Code Mode reduces that to ~1,000 tokens (2 tool definitions) while retaining access to the full API surface. The agent uses `jamf_search` to discover methods, then writes JavaScript that runs in a sandboxed `node:vm` context. This also enables multi-step workflows in a single tool call — chaining API calls, filtering results, and building reports without LLM round-trips between each step.
+We applied the same pattern to Jamf Pro. Our 115 Classic Mode tools consume ~14,000 tokens of tool definitions. Code Mode reduces that to ~500 tokens (2 tool definitions) while retaining access to the full API surface. The agent uses `jamf_search` to discover methods, then writes JavaScript that runs in a sandboxed `node:vm` context. This also enables multi-step workflows in a single tool call — chaining API calls, filtering results, and building reports without LLM round-trips between each step.
 
 **Safety features:**
 - **Plan/Apply workflow** — run with `mode: "plan"` to preview all writes without executing, then `mode: "apply"` to commit
@@ -106,30 +106,63 @@ return stale.map(c => ({ id: c.id, name: c.name, lastContact: c.lastContactTime 
 
 Real numbers from a live Jamf Pro instance (`npm run benchmark`):
 
-| Scenario | Mode | Tool Calls | Time (ms) | Payload (bytes) |
-|---|---|---:|---:|---:|
-| Device details | classic | 1 | 503 | 143 |
-| Device details | code | 1 | 744 | 451 |
-| Stale computers (30d) | classic | 1 | 108 | 38,249 |
-| Stale computers (30d) | code | 1 | 188 | 9,373 |
-| Policies using package | classic | 1 | 14,173 | 111 |
-| Policies using package | code | 1 | 12,861 | 482 |
-| Multi-step fleet analysis | classic | 7 | 2,925 | 34,944 |
-| Multi-step fleet analysis | code | 1 | 2,309 | 14,994 |
+#### Tool Definition Overhead
+
+Every conversation loads all tool definitions into the LLM's context window. Fewer tools = more room for actual work.
+
+| Mode    | Tools | Def. Size (bytes) | Est. Tokens |
+|---------|------:|--------------:|--------:|
+| Classic |   115 |        55,639 |  13,910 |
+| Code    |     2 |         1,963 |     491 |
+
+Code Mode uses **28x fewer tokens** just for tool definitions.
+
+#### Scenario Results
+
+10 scenarios covering baseline parity, cross-domain joins, multi-source audits, and workflows that are impossible in Classic Mode:
+
+| #  | Scenario                       | Mode    | LLM Trips | Time (ms) | Completable |
+|---:|--------------------------------|---------|----------:|----------:|:-----------:|
+|  1 | Single device lookup           | classic |         1 |       308 | Yes         |
+|  1 | Single device lookup           | code    |         1 |       241 | Yes         |
+|  2 | Device profile + policy logs   | classic |         1 |       276 | Yes         |
+|  2 | Device profile + policy logs   | code    |         1 |       228 | Yes         |
+|  3 | Orphaned scripts audit         | classic |         2 |       131 | Yes         |
+|  3 | Orphaned scripts audit         | code    |         1 |       172 | Yes         |
+|  4 | Policies targeting a group     | classic |         2 |       133 | Yes         |
+|  4 | Policies targeting a group     | code    |         1 |     2,611 | Yes         |
+|  5 | OS version by department       | classic |       N/A |       N/A | **No**      |
+|  5 | OS version by department       | code    |         1 |     1,073 | Yes         |
+|  6 | Full security audit            | classic |         4 |    62,945 | Yes         |
+|  6 | Full security audit            | code    |         1 |     6,936 | Yes         |
+|  7 | Policy comparison              | classic |         2 |       221 | Yes         |
+|  7 | Policy comparison              | code    |         1 |       115 | Yes         |
+|  8 | Stale devices + details (top 10) | classic |       1 |     1,017 | Yes         |
+|  8 | Stale devices + details (top 10) | code    |       1 |         4 | Yes         |
+|  9 | Package dependency audit       | classic |         1 |    15,639 | Yes         |
+|  9 | Package dependency audit       | code    |         1 |    15,015 | Yes         |
+| 10 | Group + FileVault + OS filter  | classic |       N/A |       N/A | **No**      |
+| 10 | Group + FileVault + OS filter  | code    |         1 |       187 | Yes         |
+
+**Code Mode: 10/10 completable. Classic Mode: 8/10.**
 
 **Key takeaways:**
 
-- **Multi-step workflows**: 7 tool calls → 1 (86% fewer LLM round-trips, 21% faster wall-clock). In real usage the savings are even larger — each Classic tool call is an LLM inference round-trip costing seconds of latency and tokens.
-- **Smaller payloads**: Code Mode returns only the fields you ask for — 76% smaller for stale-computer queries (9 KB vs 38 KB), which means fewer tokens fed back to the LLM.
+- **Tool definition overhead**: Classic Mode consumes ~14K tokens of context window just for tool definitions — before any work begins. Code Mode uses ~500 tokens.
+- **Impossible workflows**: Scenarios 5 and 10 require cross-resource joins (OS version × department, group members × FileVault × OS filter) that Classic Mode simply cannot express in bounded tool calls.
+- **Multi-step workflows**: Security audit (S6) drops from 4 sequential LLM round-trips to 1. Policy comparison (S7) drops from 2 to 1. Each saved round-trip eliminates seconds of LLM inference latency.
+- **Cross-domain joins**: Orphaned scripts (S3), group-scoped policies (S4), and package dependencies (S9) each require fetching a list, then detail-fetching N items — a pattern that forces Classic Mode into N sequential LLM calls. Code Mode does it in 1.
 - **Simple lookups**: Roughly equivalent. Classic's purpose-built tools have slightly less overhead for single-call operations.
-- **Bottom line**: Code Mode's value scales with task complexity. The more steps a workflow requires, the bigger the advantage.
+- **Scaling note**: These results are from a small Jamf instance. On a production fleet with hundreds of policies and devices, Classic Mode trip counts for S3/S4/S8/S9 would reach 10–20+, pushing the average LLM round-trip reduction well above 80%.
 
 Run the benchmark yourself:
 ```bash
-npm run benchmark   # requires JAMF_URL, JAMF_CLIENT_ID, JAMF_CLIENT_SECRET
+npm run benchmark                        # all 10 scenarios
+npm run benchmark -- --scenarios 1,5,10  # run a subset
+# requires JAMF_URL, JAMF_CLIENT_ID, JAMF_CLIENT_SECRET
 ```
 
-## Classic Mode (110 Tools)
+## Classic Mode (115 Tools)
 
 ## What You Can Do
 
@@ -143,7 +176,7 @@ Ask natural language questions about your Jamf fleet:
 - "Retrieve the LAPS password for this device"
 - "Show me patch compliance across the fleet"
 
-## Tools (110)
+## Tools (115)
 
 ### Compound Tools (Start Here)
 These combine multiple API calls into a single operation:
