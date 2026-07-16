@@ -175,7 +175,7 @@ const CATALOG: SearchIndexEntry[] = [
 // ── Helper entries ─────────────────────────────────────────────────
 
 const HELPER_ENTRIES: SearchIndexEntry[] = [
-  { name: 'helpers.paginate',  signature: '(fn: (limit: number) => Promise<any[]>, limit?: number) => Promise<any[]>', description: 'Auto-paginate a list call. Usage: await helpers.paginate(l => jamf.getAllComputers(l), 500)', category: 'helpers', capabilities: [], readOnly: true },
+  { name: 'helpers.paginate',  signature: '(fn: (limit: number) => Promise<any[]>, limit?: number) => Promise<any[]>', description: 'Fetch a full list (list methods paginate internally up to the limit). Usage: await helpers.paginate(l => jamf.getAllComputers(l))', category: 'helpers', capabilities: [], readOnly: true },
   { name: 'helpers.daysSince', signature: '(isoDate?: string | null) => number',                                       description: 'Calculate days since an ISO date string. Returns Infinity for null/undefined.',              category: 'helpers', capabilities: [], readOnly: true },
   { name: 'helpers.chunk',     signature: '<T>(arr: T[], size: number) => T[][]',                                       description: 'Split an array into chunks of the given size.',                                             category: 'helpers', capabilities: [], readOnly: true },
 ];

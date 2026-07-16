@@ -461,37 +461,59 @@ export class JamfApiClientHybrid implements IJamfApiClient {
   private async _searchComputersImpl(query: string, limit: number): Promise<Computer[]> {
     await this.ensureAuthenticated();
 
-    // Try Jamf Pro API first
+    // Try Jamf Pro API first — paginate across pages up to `limit`.
+    // The /computers-inventory endpoint caps page-size (~2000), so a single
+    // request silently truncates larger fleets. Walk pages until we have
+    // `limit` records or have reached totalCount.
     try {
       logger.info('Searching computers using Jamf Pro API...');
-      const params: Record<string, string | number> = {
-        'page-size': limit,
-      };
-      
-      // Only add filter if there's a query
-      if (query && query.trim() !== '') {
-        // Try simpler filter syntax
-        params.filter = `general.name=="*${query}*"`;
+      const JAMF_MAX_PAGE_SIZE = 2000; // Jamf computers-inventory per-page hard cap
+      const filter =
+        query && query.trim() !== '' ? `general.name=="*${query}*"` : undefined;
+
+      const collected: Computer[] = [];
+      let page = 0;
+      let totalCount = Infinity;
+
+      while (collected.length < limit && collected.length < totalCount) {
+        const pageSize = Math.min(JAMF_MAX_PAGE_SIZE, limit - collected.length);
+        const params: Record<string, string | number> = {
+          'page-size': pageSize,
+          page,
+          sort: 'id:asc', // stable order so pages don't overlap or skip records
+        };
+        if (filter) params.filter = filter;
+
+        const response = await this.axiosInstance.get('/api/v1/computers-inventory', {
+          params,
+        });
+
+        if (typeof response.data.totalCount === 'number') {
+          totalCount = response.data.totalCount;
+        }
+
+        const results: any[] = response.data.results || [];
+        for (const computer of results) {
+          collected.push({
+            id: computer.id,
+            name: computer.general?.name || '',
+            udid: computer.general?.udid || '',
+            serialNumber: computer.general?.serialNumber || '',
+            lastContactTime: computer.general?.lastContactTime,
+            lastReportDate: computer.general?.lastReportDate,
+            osVersion: computer.operatingSystem?.version,
+            ipAddress: computer.general?.lastIpAddress,
+            macAddress: computer.general?.macAddress,
+            assetTag: computer.general?.assetTag,
+            modelIdentifier: computer.hardware?.modelIdentifier,
+          });
+        }
+
+        if (results.length < pageSize) break; // last page reached
+        page++;
       }
-      
-      const response = await this.axiosInstance.get('/api/v1/computers-inventory', {
-        params,
-      });
-      
-      // Transform modern response
-      return response.data.results.map((computer: any) => ({
-        id: computer.id,
-        name: computer.general?.name || '',
-        udid: computer.general?.udid || '',
-        serialNumber: computer.general?.serialNumber || '',
-        lastContactTime: computer.general?.lastContactTime,
-        lastReportDate: computer.general?.lastReportDate,
-        osVersion: computer.operatingSystem?.version,
-        ipAddress: computer.general?.lastIpAddress,
-        macAddress: computer.general?.macAddress,
-        assetTag: computer.general?.assetTag,
-        modelIdentifier: computer.hardware?.modelIdentifier,
-      }));
+
+      return collected.slice(0, limit);
     } catch (error) {
       const axiosError = error as AxiosError;
       if (axiosError.response?.status === 403) {
@@ -634,7 +656,9 @@ export class JamfApiClientHybrid implements IJamfApiClient {
   /**
    * Get all computers (for compatibility)
    */
-  async getAllComputers(limit: number = 1000): Promise<any[]> {
+  // ponytail: 20000 is a safety ceiling for "all"; searchComputers paginates up
+  // to it. Raise it if a fleet ever exceeds that many managed computers.
+  async getAllComputers(limit: number = 20000): Promise<any[]> {
     const computers = await this.searchComputers('', limit);
     return computers.map(c => ({
       id: c.id,

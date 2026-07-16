@@ -43,12 +43,14 @@ function getTimeout(): number {
 function createHelpers() {
   return {
     /**
-     * Auto-paginate a list call.
-     * Usage: await helpers.paginate(limit => jamf.getAllComputers(limit), 500)
+     * Fetch a full list. The Jamf list methods (getAllComputers, searchComputers,
+     * …) now paginate internally up to the limit you pass, so this forwards a high
+     * default to retrieve everything. Pass a smaller `limit` to cap the result.
+     * Usage: await helpers.paginate(limit => jamf.getAllComputers(limit))
      */
     paginate: async (
       fn: (limit: number) => Promise<unknown[]>,
-      limit = 500,
+      limit = 20000,
     ): Promise<unknown[]> => {
       return fn(limit);
     },
