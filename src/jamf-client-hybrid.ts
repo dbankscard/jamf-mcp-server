@@ -3664,6 +3664,43 @@ export class JamfApiClientHybrid implements IJamfApiClient {
     }
   }
 
+  /**
+   * Get application usage for a computer within an inclusive date range.
+   */
+  async getComputerApplicationUsage(deviceId: string, startDate: string, endDate: string): Promise<any> {
+    if (typeof deviceId !== 'string' || !/^\d+$/.test(deviceId)) {
+      throw new Error('deviceId must be a numeric Jamf computer ID');
+    }
+    if (typeof startDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      throw new Error('startDate must use YYYY-MM-DD format');
+    }
+    if (typeof endDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      throw new Error('endDate must use YYYY-MM-DD format');
+    }
+
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting application usage for device ${deviceId} from ${startDate} to ${endDate}...`);
+      const response = await this.axiosInstance.get(
+        `/JSSResource/computerapplicationusage/id/${deviceId}/${startDate}_${endDate}`,
+        { headers: { Accept: 'application/json' } },
+      );
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, {
+          operation: 'getComputerApplicationUsage',
+          deviceId,
+          startDate,
+          endDate,
+        });
+      }
+      logger.error('Failed to get computer application usage:', { error: getErrorMessage(error) });
+      throw error;
+    }
+  }
+
   // ==========================================
   // Computer MDM Commands
   // ==========================================

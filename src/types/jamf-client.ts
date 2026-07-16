@@ -184,6 +184,7 @@ export interface IJamfApiClient {
   getComputerHistory(deviceId: string, subset?: string): Promise<any>;
   getComputerPolicyLogs(deviceId: string): Promise<any>;
   getComputerMDMCommandHistory(deviceId: string): Promise<any>;
+  getComputerApplicationUsage(deviceId: string, startDate: string, endDate: string): Promise<any>;
   sendComputerMDMCommand(deviceId: string, command: string): Promise<any>;
   flushMDMCommands(deviceId: string, commandStatus: string): Promise<void>;
 

@@ -75,6 +75,7 @@ function createMockClient(overrides: Partial<IJamfApiClient> = {}): IJamfApiClie
     getComputerHistory: jest.fn().mockResolvedValue({}),
     getComputerPolicyLogs: jest.fn().mockResolvedValue({}),
     getComputerMDMCommandHistory: jest.fn().mockResolvedValue({}),
+    getComputerApplicationUsage: jest.fn().mockResolvedValue({ applications: [] }),
     sendComputerMDMCommand: jest.fn().mockResolvedValue({}),
     flushMDMCommands: jest.fn().mockResolvedValue(undefined),
     listBuildings: jest.fn().mockResolvedValue([]),
@@ -183,6 +184,20 @@ describe('SandboxRunner', () => {
       expect(result.returnValue).toEqual({ general: { id: '123', name: 'Example Mobile App' } });
       expect(result.metrics.reads).toBe(1);
       expect(client.getMobileDeviceApplicationDetails).toHaveBeenCalledWith('123');
+    });
+
+    it('executes computer application usage reads with computer read access', async () => {
+      const client = createMockClient();
+      const result = await execute(client, {
+        code: 'return await jamf.getComputerApplicationUsage("123", "2026-01-01", "2026-01-31");',
+        mode: 'plan',
+        capabilities: ['read:computers'],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.returnValue).toEqual({ applications: [] });
+      expect(result.metrics.reads).toBe(1);
+      expect(client.getComputerApplicationUsage).toHaveBeenCalledWith('123', '2026-01-01', '2026-01-31');
     });
   });
 
