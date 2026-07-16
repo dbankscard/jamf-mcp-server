@@ -67,6 +67,17 @@ describe('SearchIndex', () => {
       });
     });
 
+    it('finds computer application usage with its read-only metadata', () => {
+      const result = search('computer application usage').find(
+        entry => entry.name === 'getComputerApplicationUsage',
+      );
+
+      expect(result).toMatchObject({
+        capabilities: ['read:computers'],
+        readOnly: true,
+      });
+    });
+
     it('ranks exact name matches highest', () => {
       const results = search('listPolicies');
       expect(results[0].name).toBe('listPolicies');

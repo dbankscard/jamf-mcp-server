@@ -24,6 +24,13 @@ describe('PolicyEngine', () => {
       expect(getMethodPolicy('getMobileDeviceApplicationDetails')).toEqual(policy);
     });
 
+    it('classifies computer application usage as a read', () => {
+      expect(getMethodPolicy('getComputerApplicationUsage')).toEqual({
+        classification: 'read',
+        capability: 'read:computers',
+      });
+    });
+
     it('returns undefined for unknown methods', () => {
       expect(getMethodPolicy('nonExistentMethod')).toBeUndefined();
     });
