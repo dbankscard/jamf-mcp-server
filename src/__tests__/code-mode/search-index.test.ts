@@ -78,6 +78,17 @@ describe('SearchIndex', () => {
       });
     });
 
+    it('finds the supported Classic API reader with its read-only metadata', () => {
+      const result = search('classic api resource').find(
+        entry => entry.name === 'getClassicApiResource',
+      );
+
+      expect(result).toMatchObject({
+        capabilities: ['read:classic_api'],
+        readOnly: true,
+      });
+    });
+
     it('ranks exact name matches highest', () => {
       const results = search('listPolicies');
       expect(results[0].name).toBe('listPolicies');

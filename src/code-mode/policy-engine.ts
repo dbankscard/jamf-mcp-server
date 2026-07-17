@@ -109,6 +109,7 @@ const METHOD_POLICIES: Record<string, MethodPolicy> = {
   getComputerPolicyLogs:        { classification: 'read',    capability: 'read:computers' },
   getComputerMDMCommandHistory: { classification: 'read',    capability: 'read:computers' },
   getComputerApplicationUsage:  { classification: 'read',    capability: 'read:computers' },
+  getClassicApiResource:        { classification: 'read',    capability: 'read:classic_api' },
   sendComputerMDMCommand:       { classification: 'command',  capability: 'command:mdm' },
   flushMDMCommands:             { classification: 'command',  capability: 'command:mdm' },
 

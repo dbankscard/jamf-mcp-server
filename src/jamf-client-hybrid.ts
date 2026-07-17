@@ -15,6 +15,76 @@ const logger = createLogger('jamf-client-hybrid');
 const agentPool = getDefaultAgentPool();
 const apiThrottle = new ConcurrencyLimiter();
 
+/**
+ * Classic API resource families without a dedicated Code Mode method that can
+ * be safely retrieved as JSON. Secret-bearing configuration resources remain
+ * deliberately excluded; see docs/CLASSIC_API_READ_COVERAGE.md.
+ */
+const CLASSIC_READ_ONLY_RESOURCES = new Set([
+  'advancedmobiledevicesearches',
+  'advancedusersearches',
+  'allowedfileextensions',
+  'byoprofiles',
+  'classes',
+  'computerapplications',
+  'computercheckin',
+  'computerconfigurations',
+  'computerhardwaresoftwarereports',
+  'computerinventorycollection',
+  'computermanagement',
+  'dockitems',
+  'ebooks',
+  'healthcarelistener',
+  'healthcarelistenerrule',
+  'ibeacons',
+  'licensedsoftware',
+  'macapplications',
+  'managedpreferenceprofiles',
+  'mobiledeviceenrollmentprofiles',
+  'mobiledeviceextensionattributes',
+  'mobiledevicehistory',
+  'netbootservers',
+  'patchavailabletitles',
+  'patchexternalsources',
+  'patchinternalsources',
+  'patchpolicies',
+  'patchreports',
+  'patchsoftwaretitles',
+  'peripherals',
+  'peripheraltypes',
+  'printers',
+  'removablemacaddresses',
+  'sites',
+  'userextensionattributes',
+  'usergroups',
+  'vppassignments',
+]);
+
+function validateClassicReadResourcePath(resourcePath: string): string {
+  if (typeof resourcePath !== 'string' || resourcePath.length === 0) {
+    throw new Error('resourcePath must be a non-empty Classic API path without /JSSResource');
+  }
+  if (resourcePath.startsWith('/') || resourcePath.includes('?') || resourcePath.includes('#')) {
+    throw new Error('resourcePath must be a relative Classic API path without a query or fragment');
+  }
+
+  const segments = resourcePath.split('/');
+  if (
+    segments.some(segment =>
+      segment.length === 0 || segment === '.' || segment === '..' || !/^[A-Za-z0-9*._:@=-]+$/.test(segment),
+    )
+  ) {
+    throw new Error('resourcePath contains unsupported path segments');
+  }
+
+  const resource = segments[0].toLowerCase();
+  if (!CLASSIC_READ_ONLY_RESOURCES.has(resource)) {
+    throw new Error(`Classic API resource "${segments[0]}" is not available through getClassicApiResource`);
+  }
+
+  return resourcePath;
+}
+
 export interface JamfApiClientConfig {
   baseUrl: string;
   // OAuth2 credentials (for Jamf Pro API)
@@ -3697,6 +3767,35 @@ export class JamfApiClientHybrid implements IJamfApiClient {
         });
       }
       logger.error('Failed to get computer application usage:', { error: getErrorMessage(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Read a supported non-sensitive Jamf Classic API resource path as JSON.
+   *
+   * The resource family is allowlisted and the path is constrained to simple
+   * URL segments, preventing arbitrary endpoints or query injection.
+   */
+  async getClassicApiResource(resourcePath: string): Promise<any> {
+    const validatedPath = validateClassicReadResourcePath(resourcePath);
+    await this.ensureAuthenticated();
+
+    try {
+      logger.info(`Getting Classic API resource ${validatedPath}...`);
+      const response = await this.axiosInstance.get(
+        `/JSSResource/${validatedPath}`,
+        { headers: { Accept: 'application/json' } },
+      );
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error)) {
+        throw JamfAPIError.fromAxiosError(error, {
+          operation: 'getClassicApiResource',
+          resourcePath: validatedPath,
+        });
+      }
+      logger.error('Failed to get Classic API resource:', { error: getErrorMessage(error) });
       throw error;
     }
   }

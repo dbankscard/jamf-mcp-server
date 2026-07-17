@@ -76,6 +76,7 @@ function createMockClient(overrides: Partial<IJamfApiClient> = {}): IJamfApiClie
     getComputerPolicyLogs: jest.fn().mockResolvedValue({}),
     getComputerMDMCommandHistory: jest.fn().mockResolvedValue({}),
     getComputerApplicationUsage: jest.fn().mockResolvedValue({ applications: [] }),
+    getClassicApiResource: jest.fn().mockResolvedValue({ computer_check_in: {} }),
     sendComputerMDMCommand: jest.fn().mockResolvedValue({}),
     flushMDMCommands: jest.fn().mockResolvedValue(undefined),
     listBuildings: jest.fn().mockResolvedValue([]),
@@ -198,6 +199,20 @@ describe('SandboxRunner', () => {
       expect(result.returnValue).toEqual({ applications: [] });
       expect(result.metrics.reads).toBe(1);
       expect(client.getComputerApplicationUsage).toHaveBeenCalledWith('123', '2026-01-01', '2026-01-31');
+    });
+
+    it('executes supported Classic API reads with the dedicated capability', async () => {
+      const client = createMockClient();
+      const result = await execute(client, {
+        code: 'return await jamf.getClassicApiResource("computercheckin/id/123");',
+        mode: 'plan',
+        capabilities: ['read:classic_api'],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.returnValue).toEqual({ computer_check_in: {} });
+      expect(result.metrics.reads).toBe(1);
+      expect(client.getClassicApiResource).toHaveBeenCalledWith('computercheckin/id/123');
     });
   });
 

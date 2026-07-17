@@ -31,6 +31,13 @@ describe('PolicyEngine', () => {
       });
     });
 
+    it('classifies supported Classic API reads with their dedicated capability', () => {
+      expect(getMethodPolicy('getClassicApiResource')).toEqual({
+        classification: 'read',
+        capability: 'read:classic_api',
+      });
+    });
+
     it('returns undefined for unknown methods', () => {
       expect(getMethodPolicy('nonExistentMethod')).toBeUndefined();
     });
